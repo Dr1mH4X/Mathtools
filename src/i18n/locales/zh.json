@@ -1,0 +1,120 @@
+{
+  "app": {
+    "title": "数学工具箱",
+    "subtitle": "交互式数学可视化",
+    "nav": {
+      "home": "首页",
+      "revolution": "旋转体体积",
+      "matrix": "矩阵计算器",
+      "graphing": "函数绘图",
+      "derivatives": "导数与积分",
+      "geometry": "几何工具",
+      "statistics": "统计学"
+    },
+    "footer": "数学工具箱 — 让数学可视化"
+  },
+  "home": {
+    "hero": "可视化探索数学",
+    "heroDesc": "一系列交互式工具，帮助你理解和可视化数学概念。",
+    "tools": "工具",
+    "comingSoon": "即将推出"
+  },
+  "revolution": {
+    "title": "旋转体体积",
+    "description": "定义曲线构成二维区域，然后绕轴旋转以可视化三维立体并计算其体积。",
+    "curves": {
+      "title": "定义曲线",
+      "add": "添加曲线",
+      "remove": "移除",
+      "placeholder": "例如 y = x^2, y = sin(x), x = 0",
+      "hint": "输入等式，例如 y = x^2、y = 0、x = 3。支持 sqrt、sin、cos、exp、pi 等。",
+      "type": "类型",
+      "yOfX": "y = f(x)",
+      "xOfY": "x = g(y)",
+      "xEquals": "x =",
+      "yEquals": "y =",
+      "verticalLine": "竖直线 x = c",
+      "horizontalLine": "水平线 y = c",
+      "expression": "表达式",
+      "constant": "值"
+    },
+    "bounds": {
+      "title": "范围",
+      "xMin": "x 最小值",
+      "xMax": "x 最大值",
+      "auto": "自动检测范围"
+    },
+    "axis": {
+      "title": "旋转轴",
+      "xAxis": "绕 X 轴旋转",
+      "yAxis": "绕 Y 轴旋转",
+      "custom": "自定义轴",
+      "axisValue": "轴位置"
+    },
+    "display": {
+      "title": "显示选项",
+      "wireframe": "线框",
+      "solid": "实体",
+      "transparent": "透明",
+      "opacity": "不透明度",
+      "showCrossSection": "显示截面",
+      "showAxes": "显示坐标轴",
+      "showGrid": "显示网格",
+      "showFormula": "显示公式",
+      "animate": "旋转动画",
+      "color": "颜色",
+      "resolution": "分辨率"
+    },
+    "result": {
+      "title": "结果",
+      "volume": "体积",
+      "formula": "公式",
+      "method": "方法",
+      "diskMethod": "圆盘/垫圈法",
+      "shellMethod": "柱壳法",
+      "approximate": "≈",
+      "exact": "精确值",
+      "copyFormula": "复制公式",
+      "copied": "已复制！"
+    },
+    "generate": "生成旋转体",
+    "reset": "重置",
+    "export": "导出图片",
+    "view2D": "二维视图",
+    "view3D": "三维视图",
+    "errors": {
+      "invalidExpression": "无效的表达式：{expr}",
+      "needAtLeast2": "至少需要 2 条曲线来定义区域。",
+      "noBoundedRegion": "未找到封闭区域，请检查曲线和范围设置。",
+      "computationError": "计算错误：{msg}",
+      "parseError": "无法解析表达式：{expr}"
+    },
+    "help": {
+      "title": "使用说明",
+      "step1": "输入至少两条曲线/直线以构成封闭区域。",
+      "step2": "设置 x 范围（或使用自动检测）。",
+      "step3": "选择旋转轴。",
+      "step4": "点击「生成旋转体」查看三维可视化效果。",
+      "examples": "示例",
+      "example1Name": "抛物线与直线",
+      "example1Desc": "y = x² 和 y = 4 之间的区域，绕 x 轴旋转。",
+      "example2Name": "正弦曲线",
+      "example2Desc": "y = sin(x) 和 y = 0 在 0 到 π 之间的区域，绕 x 轴旋转。",
+      "example3Name": "两条曲线之间",
+      "example3Desc": "y = x 和 y = x² 之间的区域，绕 y 轴旋转。",
+      "tip": "提示：拖拽旋转视角，滚轮缩放，右键平移三维视图。"
+    },
+    "presets": {
+      "title": "预设示例",
+      "load": "加载"
+    }
+  },
+  "common": {
+    "loading": "加载中...",
+    "error": "错误",
+    "close": "关闭",
+    "apply": "应用",
+    "cancel": "取消",
+    "language": "语言"
+  }
+}

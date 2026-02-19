@@ -1,0 +1,120 @@
+{
+  "app": {
+    "title": "MathTools",
+    "subtitle": "Interactive Math Visualization",
+    "nav": {
+      "home": "Home",
+      "revolution": "Volume of Revolution",
+      "matrix": "Matrix Calculator",
+      "graphing": "Function Graphing",
+      "derivatives": "Derivatives & Integrals",
+      "geometry": "Geometry Tools",
+      "statistics": "Statistics"
+    },
+    "footer": "MathTools — Making Math Visual"
+  },
+  "home": {
+    "hero": "Explore Mathematics Visually",
+    "heroDesc": "A collection of interactive tools to help you understand and visualize mathematical concepts.",
+    "tools": "Tools",
+    "comingSoon": "Coming Soon"
+  },
+  "revolution": {
+    "title": "Volume of Revolution",
+    "description": "Define curves to form a 2D region, then rotate it around an axis to visualize the 3D solid and compute its volume.",
+    "curves": {
+      "title": "Define Curves",
+      "add": "Add Curve",
+      "remove": "Remove",
+      "placeholder": "e.g. y = x^2, y = sin(x), x = 0",
+      "hint": "Enter equations, e.g. y = x^2, y = 0, x = 3. Supports sqrt, sin, cos, exp, pi, etc.",
+      "type": "Type",
+      "yOfX": "y = f(x)",
+      "xOfY": "x = g(y)",
+      "xEquals": "x =",
+      "yEquals": "y =",
+      "verticalLine": "Vertical line x = c",
+      "horizontalLine": "Horizontal line y = c",
+      "expression": "Expression",
+      "constant": "Value"
+    },
+    "bounds": {
+      "title": "Bounds",
+      "xMin": "x Min",
+      "xMax": "x Max",
+      "auto": "Auto-detect bounds"
+    },
+    "axis": {
+      "title": "Axis of Revolution",
+      "xAxis": "Around X-axis",
+      "yAxis": "Around Y-axis",
+      "custom": "Custom axis",
+      "axisValue": "Axis position"
+    },
+    "display": {
+      "title": "Display Options",
+      "wireframe": "Wireframe",
+      "solid": "Solid",
+      "transparent": "Transparent",
+      "opacity": "Opacity",
+      "showCrossSection": "Show cross-section",
+      "showAxes": "Show axes",
+      "showGrid": "Show grid",
+      "showFormula": "Show formula",
+      "animate": "Animate rotation",
+      "color": "Color",
+      "resolution": "Resolution"
+    },
+    "result": {
+      "title": "Result",
+      "volume": "Volume",
+      "formula": "Formula",
+      "method": "Method",
+      "diskMethod": "Disk/Washer Method",
+      "shellMethod": "Shell Method",
+      "approximate": "≈",
+      "exact": "Exact",
+      "copyFormula": "Copy formula",
+      "copied": "Copied!"
+    },
+    "generate": "Generate Solid",
+    "reset": "Reset",
+    "export": "Export Image",
+    "view2D": "2D View",
+    "view3D": "3D View",
+    "errors": {
+      "invalidExpression": "Invalid expression: {expr}",
+      "needAtLeast2": "At least 2 curves are needed to define a region.",
+      "noBoundedRegion": "No bounded region found. Check your curves and bounds.",
+      "computationError": "Computation error: {msg}",
+      "parseError": "Could not parse expression: {expr}"
+    },
+    "help": {
+      "title": "How to Use",
+      "step1": "Enter at least two curves/lines to form a closed region.",
+      "step2": "Set the x-range bounds (or use auto-detect).",
+      "step3": "Choose the axis of revolution.",
+      "step4": "Click \"Generate Solid\" to see the 3D visualization.",
+      "examples": "Examples",
+      "example1Name": "Parabola & Line",
+      "example1Desc": "Region between y = x² and y = 4, rotated around x-axis.",
+      "example2Name": "Sine Curve",
+      "example2Desc": "Region between y = sin(x) and y = 0 from 0 to π, rotated around x-axis.",
+      "example3Name": "Between Two Curves",
+      "example3Desc": "Region between y = x and y = x², rotated around y-axis.",
+      "tip": "Tip: You can drag to rotate, scroll to zoom, and right-click to pan the 3D view."
+    },
+    "presets": {
+      "title": "Preset Examples",
+      "load": "Load"
+    }
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "close": "Close",
+    "apply": "Apply",
+    "cancel": "Cancel",
+    "language": "Language"
+  }
+}
