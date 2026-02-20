@@ -2,6 +2,7 @@
 import { ref, reactive, computed, watch, onMounted, nextTick, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import katex from "katex";
+import DOMPurify from "dompurify";
 import Canvas2D from "@/components/revolution/Canvas2D.vue";
 import { useThreeScene, defaultDisplayOptions, type DisplayOptions } from "@/composables/useThreeScene";
 import {
@@ -143,10 +144,10 @@ const curveLatexMap = computed<Record<string, string>>(() => {
     const tex = equationToLatex(ci.equation);
     if (!tex) continue;
     try {
-      map[ci.id] = katex.renderToString(tex, {
+      map[ci.id] = DOMPurify.sanitize(katex.renderToString(tex, {
         throwOnError: false,
         displayMode: false,
-      });
+      }));
     } catch {
       // skip
     }
@@ -162,12 +163,12 @@ const volumeFormatted = computed(() => {
 const formulaHtml = computed(() => {
   if (!result.value) return "";
   try {
-    return katex.renderToString(result.value.formulaLatex, {
+    return DOMPurify.sanitize(katex.renderToString(result.value.formulaLatex, {
       throwOnError: false,
       displayMode: true,
-    });
+    }));
   } catch {
-    return result.value.formulaLatex;
+    return DOMPurify.sanitize(result.value.formulaLatex);
   }
 });
 
@@ -175,10 +176,10 @@ const volumeHtml = computed(() => {
   if (!volumeFormatted.value) return "";
   try {
     const latex = `V = ${volumeFormatted.value.latex} \\approx ${result.value!.volume.toFixed(4)}`;
-    return katex.renderToString(latex, {
+    return DOMPurify.sanitize(katex.renderToString(latex, {
       throwOnError: false,
       displayMode: true,
-    });
+    }));
   } catch {
     return "";
   }
