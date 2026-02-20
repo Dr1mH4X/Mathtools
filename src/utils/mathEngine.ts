@@ -416,7 +416,7 @@ export function computeRegion(
   const lowerPts: ProfilePoint[] = [];
 
   const dx = (effectiveXMax - effectiveXMin) / resolution;
-  const eps = Math.max(1e-9, (effectiveXMax - effectiveXMin) * 1e-9);
+  // const eps = Math.max(1e-9, (effectiveXMax - effectiveXMin) * 1e-9);
 
   let currentTopIdx: number | null = null;
   let currentBotIdx: number | null = null;
@@ -560,7 +560,7 @@ export function computeRegion(
   };
 }
 
-function computeRegionTwoCurves(
+export function computeRegionTwoCurves(
   f1: (x: number) => number,
   f2: (x: number) => number,
   xMin: number,
@@ -634,7 +634,7 @@ function computeRegionTwoCurves(
   return { upperProfile: upper, lowerProfile: lower, xMin, xMax };
 }
 
-function computeRegionMultiCurves(
+export function computeRegionMultiCurves(
   fns: ((x: number) => number)[],
   xMin: number,
   xMax: number,
