@@ -356,6 +356,19 @@ function findIntersectionsXRange(
  * 4. If the active pair ceases to be valid (e.g., intersection/split),
  *    select the new pair that maintains continuity (matches the previous height).
  */
+// ===== Region computation =====
+
+/**
+ * Given a set of curves and x-bounds, compute the upper and lower boundary
+ * profiles of the bounded region.
+ *
+ * Revised Algorithm:
+ * 1. Scan the x-range iteratively.
+ * 2. At each step, identify all valid adjacent curve pairs.
+ * 3. Maintain the "active" boundary pair.
+ * 4. If the active pair ceases to be valid (e.g., intersection/split),
+ *    select the new pair that maintains continuity (matches the previous height).
+ */
 export function computeRegion(
   curves: CurveDefinition[],
   xMin: number,
@@ -375,24 +388,19 @@ export function computeRegion(
   const xConstCurves = compiled.filter((c) => c.def.type === "x_const");
   const funcCurves = compiled.filter((c) => c.def.type !== "x_const");
 
-  if (xConstCurves.length > 0) {
+  if (xConstCurves.length >= 2) {
+    // Only when we have two or more vertical lines do we use them to bound the region
     const xVals = xConstCurves.map((c) => c.constVal!).sort((a, b) => a - b);
-    if (xConstCurves.length >= 2) {
-      const first = xVals[0];
-      const last = xVals[xVals.length - 1];
-      if (first !== undefined) effectiveXMin = Math.max(effectiveXMin, first);
-      if (last !== undefined) effectiveXMax = Math.min(effectiveXMax, last);
-    } else if (xConstCurves.length === 1) {
-      const xv = xVals[0];
-      if (xv !== undefined) {
-        if (Math.abs(xv - effectiveXMin) < Math.abs(xv - effectiveXMax)) {
-          effectiveXMin = xv;
-        } else {
-          effectiveXMax = xv;
-        }
-      }
-    }
+    const first = xVals[0];
+    const last = xVals[xVals.length - 1];
+    if (first !== undefined) effectiveXMin = Math.max(effectiveXMin, first);
+    if (last !== undefined) effectiveXMax = Math.min(effectiveXMax, last);
   }
+  // FIX: When there's only one vertical line, do NOT modify the bounds.
+  // A single vertical line doesn't define a closed region boundary.
+  // Let the intersection detection handle finding the correct x range.
+  // Previously, the code incorrectly set xMin or xMax based on distance,
+  // which could skip valid regions (e.g., skipping [1,5] when user wanted [1,10]).
 
   if (effectiveXMin >= effectiveXMax) {
     throw new Error(
