@@ -342,25 +342,6 @@ function findIntersectionsXRange(
 /**
  * Given a set of curves and x-bounds, compute the upper and lower boundary
  * profiles of the bounded region.
- */
-// ... existing imports and types ...
-
-/**
- * Given a set of curves and x-bounds, compute the upper and lower boundary
- * profiles of the bounded region.
- *
- * Revised Algorithm:
- * 1. Scan the x-range iteratively.
- * 2. At each step, identify all valid adjacent curve pairs.
- * 3. Maintain the "active" boundary pair.
- * 4. If the active pair ceases to be valid (e.g., intersection/split),
- *    select the new pair that maintains continuity (matches the previous height).
- */
-// ===== Region computation =====
-
-/**
- * Given a set of curves and x-bounds, compute the upper and lower boundary
- * profiles of the bounded region.
  *
  * Revised Algorithm:
  * 1. Scan the x-range iteratively.
