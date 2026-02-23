@@ -424,12 +424,16 @@
 
 /* Tailwind preflight `* { margin:0; padding:0; box-sizing:border-box }` strips
    spacing that KaTeX's own CSS relies on for .vlist positioning, superscripts,
-   subscripts, fractions, etc. Revert to browser defaults inside .katex.
+   subscripts, fractions, etc. Revert to browser defaults inside KaTeX subtrees.
+   Scoped to .katex-html / .katex-mathml to avoid collateral resets on siblings.
    Do NOT use !important here — KaTeX's own explicit styles (higher specificity)
    must still win over this blanket revert. */
-.katex *,
-.katex *::before,
-.katex *::after {
+.katex .katex-html *,
+.katex .katex-html *::before,
+.katex .katex-html *::after,
+.katex .katex-mathml *,
+.katex .katex-mathml *::before,
+.katex .katex-mathml *::after {
     margin: revert;
     padding: revert;
     box-sizing: revert;
