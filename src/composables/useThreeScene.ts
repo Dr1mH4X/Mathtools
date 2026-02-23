@@ -94,11 +94,11 @@ export function useThreeScene(
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.rotateSpeed = 1.0;
-    controls.zoomSpeed = 0;
-    controls.panSpeed = 0;
+    controls.zoomSpeed = 1.0;
+    controls.panSpeed = 0.8;
     controls.enableRotate = true;
-    controls.enableZoom = false;
-    controls.enablePan = false;
+    controls.enableZoom = true;
+    controls.enablePan = true;
     controls.minDistance = 1;
     controls.maxDistance = 100;
     controls.target.set(0, 0, 0);

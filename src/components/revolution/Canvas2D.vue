@@ -819,8 +819,16 @@ function onMouseUp() {
     isDragging.value = false;
 }
 
-function onWheel(_e: WheelEvent) {
-    // keep wheel behavior disabled so parent/page scroll remains available
+function onWheel(e: WheelEvent) {
+    e.preventDefault();
+
+    const zoomFactor = 1.1;
+    if (e.deltaY < 0) {
+        viewScale.value = Math.min(8, viewScale.value * zoomFactor);
+    } else {
+        viewScale.value = Math.max(0.2, viewScale.value / zoomFactor);
+    }
+    draw();
 }
 
 function onTouchStart(e: TouchEvent) {
@@ -976,7 +984,7 @@ defineExpose({ resetView, draw });
             style="touch-action: pan-x pan-y pinch-zoom"
             :style="{ width: canvasWidth + 'px', height: canvasHeight + 'px' }"
             @mousedown="onMouseDown"
-            @wheel.passive="onWheel"
+            @wheel.prevent="onWheel"
             @touchstart.passive="onTouchStart"
             @touchmove.passive="onTouchMove"
             @touchend.passive="onTouchEnd"
