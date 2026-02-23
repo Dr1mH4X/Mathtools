@@ -819,8 +819,22 @@ function onMouseUp() {
     isDragging.value = false;
 }
 
-function onWheel(_e: WheelEvent) {
-    // keep wheel behavior disabled so parent/page scroll remains available
+function onWheel(e: WheelEvent) {
+    const zoomFactor = 1.1;
+    const oldScale = viewScale.value;
+
+    if (e.deltaY < 0) {
+        viewScale.value = Math.min(8, oldScale * zoomFactor);
+    } else {
+        viewScale.value = Math.max(0.2, oldScale / zoomFactor);
+    }
+
+    // Only consume the event when zoom actually changed;
+    // at the limits let the wheel event propagate so the page can scroll.
+    if (viewScale.value !== oldScale) {
+        e.preventDefault();
+        draw();
+    }
 }
 
 function onTouchStart(e: TouchEvent) {
@@ -976,7 +990,7 @@ defineExpose({ resetView, draw });
             style="touch-action: pan-x pan-y pinch-zoom"
             :style="{ width: canvasWidth + 'px', height: canvasHeight + 'px' }"
             @mousedown="onMouseDown"
-            @wheel.passive="onWheel"
+            @wheel="onWheel"
             @touchstart.passive="onTouchStart"
             @touchmove.passive="onTouchMove"
             @touchend.passive="onTouchEnd"

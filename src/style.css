@@ -393,13 +393,51 @@
 }
 
 /* ===== KaTeX overrides ===== */
+/* These rules sit OUTSIDE any @layer so they get the highest cascade priority,
+   preventing Tailwind's preflight / base resets from breaking KaTeX rendering. */
+
+.katex,
+.katex-display {
+    font-size: 1.05em !important;
+    line-height: normal !important;
+}
+
 .katex-display {
     margin: 0.5em 0 !important;
     overflow-x: auto;
     overflow-y: hidden;
 }
-.katex {
-    font-size: 1.05em !important;
+
+/* Tailwind preflight sets `svg { display: block }` which breaks KaTeX inline SVGs
+   (square-root signs, fraction bars, delimiters, etc.). Restore them. */
+.katex svg,
+.katex-display svg {
+    display: inline !important;
+    max-width: none !important;
+}
+
+.katex img,
+.katex-display img {
+    display: inline !important;
+    max-width: none !important;
+}
+
+/* Tailwind preflight `* { margin:0; padding:0; box-sizing:border-box }` strips
+   spacing that KaTeX's own CSS relies on for .vlist positioning, superscripts,
+   subscripts, fractions, etc. Revert to browser defaults inside KaTeX subtrees.
+   Scoped to .katex-html / .katex-mathml to avoid collateral resets on siblings.
+   Do NOT use !important here — KaTeX's own explicit styles (higher specificity)
+   must still win over this blanket revert. */
+.katex .katex-html *,
+.katex .katex-html *::before,
+.katex .katex-html *::after,
+.katex .katex-mathml *,
+.katex .katex-mathml *::before,
+.katex .katex-mathml *::after {
+    margin: revert;
+    padding: revert;
+    box-sizing: revert;
+    border: revert;
 }
 
 /* ===== Responsive helpers ===== */
