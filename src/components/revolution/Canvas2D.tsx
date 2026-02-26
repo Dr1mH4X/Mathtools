@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import { ZoomIn, ZoomOut } from "lucide-react";
 import type { ComputedRegion, CurveDefinition } from "@/utils/types";
-import { sampleCurve } from "@/utils/mathEngine";
+import { sampleCurve, compileCurve, evalCurve } from "@/utils/mathEngine";
 
 export interface Canvas2DProps {
   curves: CurveDefinition[];
@@ -48,17 +48,36 @@ function findIntersections(
   const steps = 500;
   const dx = (viewMaxX - viewMinX) / steps;
 
+  // Pre-compute samples and compiled curves once for all pairs
+  const samplesCache: { x: number; y: number }[][] = [];
+  const compiledCache: ReturnType<typeof compileCurve>[] = [];
+
+  for (let i = 0; i < curves.length; i++) {
+    samplesCache.push(sampleCurve(curves[i]!, viewMinX, viewMaxX, steps));
+    try {
+      compiledCache.push(compileCurve(curves[i]!));
+    } catch {
+      compiledCache.push(null as any);
+    }
+  }
+
+  /** Evaluate a single curve at a single x value using the pre-compiled version */
+  const evalAt = (curveIdx: number, x: number): number => {
+    const cc = compiledCache[curveIdx];
+    if (!cc) return NaN;
+    return evalCurve(cc, x);
+  };
+
   for (let ci = 0; ci < curves.length; ci++) {
     for (let cj = ci + 1; cj < curves.length; cj++) {
-      const pts1 = sampleCurve(curves[ci]!, viewMinX, viewMaxX, steps);
-      const pts2 = sampleCurve(curves[cj]!, viewMinX, viewMaxX, steps);
+      const pts1 = samplesCache[ci]!;
+      const pts2 = samplesCache[cj]!;
 
       if (pts1.length < 2 || pts2.length < 2) continue;
 
-      // Build lookup maps indexed by x for fast comparison
+      // Build lookup map indexed by rounded x for fast comparison
       const map2 = new Map<number, number>();
       for (const p of pts2) {
-        // Round x to avoid floating point mismatch
         map2.set(Math.round(p.x * 1e8) / 1e8, p.y);
       }
 
@@ -80,25 +99,15 @@ function findIntersections(
           prevDiff * diff <= 0 &&
           Math.abs(diff - prevDiff) < 100
         ) {
-          // Sign change — bisect to find intersection
+          // Sign change — bisect to find intersection using compiled curves
           let lo = prevX;
           let hi = p1.x;
           for (let iter = 0; iter < 20; iter++) {
             const mid = (lo + hi) / 2;
-            const s1 = sampleCurve(
-              curves[ci]!,
-              mid - dx * 0.001,
-              mid + dx * 0.001,
-              1,
-            );
-            const s2 = sampleCurve(
-              curves[cj]!,
-              mid - dx * 0.001,
-              mid + dx * 0.001,
-              1,
-            );
-            if (s1.length === 0 || s2.length === 0) break;
-            const midDiff = s1[0]!.y - s2[0]!.y;
+            const y1Mid = evalAt(ci, mid);
+            const y2Mid = evalAt(cj, mid);
+            if (!isFinite(y1Mid) || !isFinite(y2Mid)) break;
+            const midDiff = y1Mid - y2Mid;
             if (!isFinite(midDiff)) break;
             if (prevDiff * midDiff <= 0) {
               hi = mid;
@@ -107,15 +116,9 @@ function findIntersections(
             }
           }
           const ix = (lo + hi) / 2;
-          const sp = sampleCurve(
-            curves[ci]!,
-            ix - dx * 0.001,
-            ix + dx * 0.001,
-            1,
-          );
-          if (sp.length > 0 && isFinite(sp[0]!.y)) {
+          const iy = evalAt(ci, ix);
+          if (isFinite(iy)) {
             // Deduplicate: check if we already have a nearby intersection
-            const iy = sp[0]!.y;
             const isDup = intersections.some(
               (pt) =>
                 Math.abs(pt.x - ix) < dx * 2 && Math.abs(pt.y - iy) < 0.01,
