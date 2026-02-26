@@ -165,13 +165,14 @@ src/
 
 ### utils — 工具库（模块化架构）
 
-原先所有数学逻辑集中在单一的 `mathEngine.ts` (1400+ 行)，现已按职责拆分为 7 个独立子模块。
+原先所有数学逻辑集中在单一的 `mathEngine.ts` (1400+ 行)，现已按职责拆分为 8 个独立子模块。
 `mathEngine.ts` 保留为 **barrel 重导出文件**，所有已有的 `import { ... } from "@/utils/mathEngine"` 无需任何修改即可正常工作。
 
 ```
 utils/
 ├── mathEngine.ts      ← barrel 重导出（向后兼容入口）
 ├── types.ts           ← 共享类型定义
+├── curveDefaults.ts   ← 集中管理的数值常量与诊断工具
 ├── latex.ts           ← LaTeX 相关
 ├── curveEngine.ts     ← 曲线层
 ├── regionEngine.ts    ← 区域层
@@ -194,6 +195,25 @@ utils/
 | `MeshProfilePoint`  | interface | 3D 网格轮廓点 `{ radius, axisPos }`                              |
 | `PresetExample`     | interface | 预设示例定义                                                      |
 | `CompiledCurve`     | interface | 编译后的曲线内部表示                                              |
+
+#### `curveDefaults.ts` — 集中管理的数值常量与诊断工具
+
+所有控制 y 采样窗口、搜索范围和视觉范围的数值常量集中在此文件中，
+修改一处即可同步影响 `curveEngine.ts`、`regionEngine.ts`、`volumeEngine.ts` 等所有消费方。
+
+| 符号 / 函数                  | 类别     | 说明                                                                 |
+| ---------------------------- | -------- | -------------------------------------------------------------------- |
+| `INVERSE_Y_MIN`              | const    | 反函数采样 y 窗口下界（默认 -50）                                     |
+| `INVERSE_Y_MAX`              | const    | 反函数采样 y 窗口上界（默认 50）                                      |
+| `INVERSE_SAMPLE_COUNT`       | const    | 反函数采样点数（默认 1000）                                           |
+| `SAMPLE_CURVE_Y_MIN`         | const    | `sampleCurve` 中 x=g(y) 曲线绘图 y 范围下界（默认 -10）              |
+| `SAMPLE_CURVE_Y_MAX`         | const    | `sampleCurve` 中 x=g(y) 曲线绘图 y 范围上界（默认 10）               |
+| `VERTICAL_LINE_EXTENT`       | const    | 垂直线 (x=const) 的视觉 y 范围 ±值（默认 1000）                      |
+| `AUTO_DETECT_SEARCH_MIN`     | const    | `autoDetectBounds` 默认 x 搜索范围下界（默认 -20）                    |
+| `AUTO_DETECT_SEARCH_MAX`     | const    | `autoDetectBounds` 默认 x 搜索范围上界（默认 20）                     |
+| `CURVE_ENGINE_DEBUG`         | const    | 诊断开关，开发模式自动为 `true`，生产环境为 `false`                    |
+| `warnOnce(tag, key, message)` | function | 去重 + debug 门控的 `console.warn`，同一 `(tag, key)` 只输出一次      |
+| `resetWarnings()`            | function | 清空去重集合（切换预设/测试时使用）                                    |
 
 #### `latex.ts` — LaTeX 规范化与渲染
 
@@ -254,7 +274,8 @@ utils/
 
 #### `mathEngine.ts` — Barrel 重导出
 
-此文件不再包含任何业务逻辑，仅通过 `export { ... } from "./xxx"` 和 `export type { ... } from "./types"` 重导出上述所有子模块的公共 API。
+此文件不再包含任何业务逻辑，仅通过 `export { ... } from "./xxx"` 和 `export type { ... } from "./types"` 重导出上述所有子模块的公共 API，
+包括 `curveDefaults.ts` 中的集中常量和诊断工具。
 所有已有的 `import { ... } from "@/utils/mathEngine"` 保持完全兼容，无需修改任何消费侧代码。
 
 ### i18n — 国际化

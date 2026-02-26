@@ -12,6 +12,10 @@ import {
   tryCreateInverseFunction,
   findIntersectionsXRange,
 } from "./curveEngine";
+import {
+  AUTO_DETECT_SEARCH_MIN,
+  AUTO_DETECT_SEARCH_MAX,
+} from "./curveDefaults";
 import { buildDiskFormulaLatex, buildShellFormulaLatex } from "./latex";
 
 // ===================================================================
@@ -225,7 +229,10 @@ export function createInterpolator(
  */
 export function autoDetectBounds(
   curves: CurveDefinition[],
-  searchRange: [number, number] = [-20, 20],
+  searchRange: [number, number] = [
+    AUTO_DETECT_SEARCH_MIN,
+    AUTO_DETECT_SEARCH_MAX,
+  ],
   inverseOptions?: InverseFunctionOptions,
 ): { xMin: number; xMax: number } {
   const compiled = curves.map(compileCurve);
@@ -248,16 +255,13 @@ export function autoDetectBounds(
   // For x_of_y curves we use the safe wrapper so that a single curve whose
   // y-domain lies outside the sampling window doesn't abort the entire
   // auto-detection — it will simply be skipped (treated as NaN).
+  // Diagnostics are handled by the debug-gated `warnOnce` inside
+  // `tryCreateInverseFunction` (no onError callback needed).
   const yFunctions: ((x: number) => number)[] = funcCurves.map((cc) => {
     if (cc.def.type === "y_of_x" || cc.def.type === "y_const") {
       return (x: number) => evalCurve(cc, x);
     } else if (cc.def.type === "x_of_y") {
-      return tryCreateInverseFunction(cc, inverseOptions, (err) => {
-        console.warn(
-          `[autoDetectBounds] Could not build inverse for "${cc.def.expression}":`,
-          err instanceof Error ? err.message : err,
-        );
-      });
+      return tryCreateInverseFunction(cc, inverseOptions);
     }
     return (_x: number) => NaN;
   });

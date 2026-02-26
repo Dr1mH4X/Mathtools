@@ -68,16 +68,13 @@ export function computeRegion(
   // For x_of_y curves we use the safe wrapper so that a single curve whose
   // y-domain lies outside the sampling window doesn't abort the entire
   // region computation — it will simply be treated as unevaluable (NaN).
+  // Diagnostics are handled by the debug-gated `warnOnce` inside
+  // `tryCreateInverseFunction` (no onError callback needed).
   const yFunctions: ((x: number) => number)[] = funcCurves.map((cc) => {
     if (cc.def.type === "y_of_x" || cc.def.type === "y_const") {
       return (x: number) => evalCurve(cc, x);
     } else if (cc.def.type === "x_of_y") {
-      return tryCreateInverseFunction(cc, inverseOptions, (err) => {
-        console.warn(
-          `[computeRegion] Could not build inverse for "${cc.def.expression}":`,
-          err instanceof Error ? err.message : err,
-        );
-      });
+      return tryCreateInverseFunction(cc, inverseOptions);
     }
     return (_x: number) => NaN;
   });

@@ -6,6 +6,15 @@ import type {
   ProfilePoint,
 } from "./types";
 import { normalizeExpression } from "./latex";
+import {
+  INVERSE_Y_MIN,
+  INVERSE_Y_MAX,
+  INVERSE_SAMPLE_COUNT,
+  SAMPLE_CURVE_Y_MIN,
+  SAMPLE_CURVE_Y_MAX,
+  VERTICAL_LINE_EXTENT,
+  warnOnce,
+} from "./curveDefaults";
 
 // ===================================================================
 // Curve Engine
@@ -16,8 +25,9 @@ import { normalizeExpression } from "./latex";
 //   3. compileCurve           — CurveDefinition → CompiledCurve (mathjs compiled)
 //   4. evalCurve              — evaluate a compiled curve at a parameter value
 //   5. createInverseFunction  — approximate inverse for x=g(y) curves
-//   6. findIntersectionsXRange — scan+bisect to find intersection x-values
-//   7. sampleCurve            — sample a curve for 2D canvas drawing
+//   6. tryCreateInverseFunction — safe wrapper (no throw)
+//   7. findIntersectionsXRange — scan+bisect to find intersection x-values
+//   8. sampleCurve            — sample a curve for 2D canvas drawing
 // ===================================================================
 
 // ===== Equation parsing =====
@@ -137,13 +147,24 @@ export function evalCurve(cc: CompiledCurve, paramValue: number): number {
 
 // ===== Inverse function approximation =====
 
-/** Options for controlling the y-sampling window of `createInverseFunction`. */
+/**
+ * Options for controlling the y-sampling window of `createInverseFunction`.
+ *
+ * All fields are optional.  When omitted the centralised defaults from
+ * `curveDefaults.ts` are used:
+ *
+ * | field         | default constant         | value  |
+ * |---------------|--------------------------|--------|
+ * | `yMin`        | `INVERSE_Y_MIN`          | -50    |
+ * | `yMax`        | `INVERSE_Y_MAX`          |  50    |
+ * | `sampleCount` | `INVERSE_SAMPLE_COUNT`   | 1000   |
+ */
 export interface InverseFunctionOptions {
-  /** Lower bound of the y-sampling window (default: -50). */
+  /** Lower bound of the y-sampling window (default: {@link INVERSE_Y_MIN}). */
   yMin?: number;
-  /** Upper bound of the y-sampling window (default: 50). */
+  /** Upper bound of the y-sampling window (default: {@link INVERSE_Y_MAX}). */
   yMax?: number;
-  /** Number of evenly-spaced samples within the window (default: 1000). */
+  /** Number of evenly-spaced samples within the window (default: {@link INVERSE_SAMPLE_COUNT}). */
   sampleCount?: number;
 }
 
@@ -152,11 +173,13 @@ export interface InverseFunctionOptions {
  * Samples the curve densely over a y-range and returns a function
  * that maps target-x → approximate-y via binary search + interpolation.
  *
- * **Limitation:** the default y-sampling window is [-50, 50].  Curves whose
- * relevant y-range lies outside this window (e.g. `x = e^y` for large x)
- * will produce no usable samples.  Pass `options.yMin` / `options.yMax` to
- * widen or shift the window as needed.  If no finite samples are found in
- * the window the function **throws** instead of silently returning `NaN`.
+ * **Limitation:** the default y-sampling window is
+ * [`INVERSE_Y_MIN`, `INVERSE_Y_MAX`] (see `curveDefaults.ts`).
+ * Curves whose relevant y-range lies outside this window
+ * (e.g. `x = e^y` for large x) will produce no usable samples.
+ * Pass `options.yMin` / `options.yMax` to widen or shift the window
+ * as needed.  If no finite samples are found in the window the
+ * function **throws** instead of silently returning `NaN`.
  *
  * For call sites that prefer graceful degradation over a thrown error,
  * use {@link tryCreateInverseFunction} instead.
@@ -165,9 +188,9 @@ export function createInverseFunction(
   cc: CompiledCurve,
   options?: InverseFunctionOptions,
 ): (x: number) => number {
-  const sampleCount = options?.sampleCount ?? 1000;
-  const yGuessMin = options?.yMin ?? -50;
-  const yGuessMax = options?.yMax ?? 50;
+  const sampleCount = options?.sampleCount ?? INVERSE_SAMPLE_COUNT;
+  const yGuessMin = options?.yMin ?? INVERSE_Y_MIN;
+  const yGuessMax = options?.yMax ?? INVERSE_Y_MAX;
   const dy = (yGuessMax - yGuessMin) / sampleCount;
 
   const samples: { x: number; y: number }[] = [];
@@ -239,6 +262,11 @@ export function createInverseFunction(
  * `onError` callback is invoked with the caught error so callers can log
  * or surface the issue without aborting higher-level computations.
  *
+ * When no `onError` is supplied the failure is reported via the
+ * debug-gated {@link warnOnce} utility from `curveDefaults.ts`, which
+ * deduplicates repeated messages and is silent when
+ * `CURVE_ENGINE_DEBUG` is `false`.
+ *
  * This is the recommended entry point for best-effort helpers such as
  * `computeRegion` and `autoDetectBounds`, where a single problematic
  * curve should not crash the entire operation.
@@ -253,6 +281,15 @@ export function tryCreateInverseFunction(
   } catch (err: unknown) {
     if (onError) {
       onError(err);
+    } else {
+      // Fall back to the debug-gated, deduplicated warning so callers
+      // that don't supply a callback still get diagnostics without
+      // flooding the console on every re-evaluation.
+      warnOnce(
+        "tryCreateInverseFunction",
+        cc.def.expression,
+        `Could not build inverse for "${cc.def.expression}": ${err instanceof Error ? err.message : err}`,
+      );
     }
     // Return a fallback inverse that signals "no data" for every input.
     return (_x: number) => NaN;
@@ -316,6 +353,11 @@ export function findIntersectionsXRange(
  * Returns an array of { x, y } points (NaN values are filtered out).
  * Handles domain-boundary detection via bisection so curves like
  * y = sqrt(x-1) start precisely at (1, 0).
+ *
+ * For `x_of_y` curves the y-range defaults to
+ * [`SAMPLE_CURVE_Y_MIN`, `SAMPLE_CURVE_Y_MAX`] from `curveDefaults.ts`.
+ * For `x_const` vertical lines the visual extent is
+ * ±`VERTICAL_LINE_EXTENT`.
  */
 export function sampleCurve(
   curve: CurveDefinition,
@@ -342,8 +384,8 @@ export function sampleCurve(
 
   if (effectiveCurve.type === "x_const") {
     const xVal = cc.constVal ?? 0;
-    pts.push({ x: xVal, y: -1000 });
-    pts.push({ x: xVal, y: 1000 });
+    pts.push({ x: xVal, y: -VERTICAL_LINE_EXTENT });
+    pts.push({ x: xVal, y: VERTICAL_LINE_EXTENT });
     return pts;
   }
 
@@ -355,8 +397,8 @@ export function sampleCurve(
   }
 
   if (effectiveCurve.type === "x_of_y") {
-    const yMin = -10;
-    const yMax = 10;
+    const yMin = SAMPLE_CURVE_Y_MIN;
+    const yMax = SAMPLE_CURVE_Y_MAX;
     const dyStep = (yMax - yMin) / steps;
     for (let i = 0; i <= steps; i++) {
       const y = yMin + i * dyStep;
