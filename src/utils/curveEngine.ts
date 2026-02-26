@@ -20,6 +20,7 @@ import {
 // Curve Engine
 //
 // Handles all curve-level operations:
+//   0. evalConst              — safely evaluate a constant expression string
 //   1. parseEquation         — raw equation string → { type, expression }
 //   2. isConstantExpression   — detect if expression has no free variable
 //   3. compileCurve           — CurveDefinition → CompiledCurve (mathjs compiled)
@@ -29,6 +30,79 @@ import {
 //   7. findIntersectionsXRange — scan+bisect to find intersection x-values
 //   8. sampleCurve            — sample a curve for 2D canvas drawing
 // ===================================================================
+
+// ===== Constant expression evaluation =====
+
+/**
+ * Maximum allowed length for an expression passed to {@link evalConst}.
+ *
+ * Expressions longer than this are rejected before reaching `mathjs`
+ * to prevent pathologically complex inputs from consuming excessive
+ * CPU time.  200 characters is generous enough for any realistic
+ * constant expression (e.g. `((sqrt(2))/(pi))`) while blocking
+ * crafted mega-strings.
+ */
+const EVAL_CONST_MAX_LENGTH = 200;
+
+/**
+ * Whitelist pattern for characters allowed in a constant expression.
+ *
+ * Only digits, decimal points, arithmetic operators, parentheses,
+ * whitespace, and ASCII letters (for names like `pi`, `sqrt`, `exp`)
+ * are permitted.  Everything else — including semicolons, brackets,
+ * quotes, and backslashes — is rejected before evaluation.
+ */
+const EVAL_CONST_ALLOWED = /^[0-9a-zA-Z+\-*/^()._ \t]+$/;
+
+/**
+ * Safely evaluate a constant expression string to a finite number.
+ *
+ * Handles plain numeric strings (`"0.5"`), normalised mathjs
+ * expressions (`"((1)/(2))"`), and symbolic constants (`"pi"`,
+ * `"sqrt(2)"`).
+ *
+ * **Security / performance guards** (addresses untrusted-input concerns):
+ *
+ * 1. **Length limit** — expressions longer than
+ *    {@link EVAL_CONST_MAX_LENGTH} characters are rejected immediately.
+ * 2. **Character whitelist** — only alphanumeric characters, basic
+ *    arithmetic operators, parentheses, decimal points, and
+ *    whitespace are allowed.  This blocks assignment (`=`), indexing
+ *    (`[]`), string literals, semicolons, and other constructs that
+ *    could trigger heavier mathjs code paths.
+ * 3. **`parseFloat` fast-path** — trivial numeric strings never
+ *    reach `evaluate()` at all.
+ *
+ * Returns `NaN` if the expression is invalid, too long, contains
+ * disallowed characters, or does not evaluate to a finite number.
+ */
+export function evalConst(expr: string): number {
+  // Fast path: plain number
+  const simple = parseFloat(expr);
+  if (
+    isFinite(simple) &&
+    /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(expr.trim())
+  ) {
+    return simple;
+  }
+
+  // Guard: reject overly long expressions
+  if (expr.length > EVAL_CONST_MAX_LENGTH) {
+    return NaN;
+  }
+
+  // Guard: only allow whitelisted characters
+  if (!EVAL_CONST_ALLOWED.test(expr)) {
+    return NaN;
+  }
+
+  try {
+    const result = Number(evaluate(expr));
+    return isFinite(result) ? result : NaN;
+  } catch {
+    return NaN;
+  }
+}
 
 // ===== Equation parsing =====
 
@@ -100,15 +174,9 @@ export function isConstantExpression(expr: string, variable: string): boolean {
  */
 export function compileCurve(curve: CurveDefinition): CompiledCurve {
   if (curve.type === "x_const" || curve.type === "y_const") {
-    const val = parseFloat(curve.expression);
+    const val = evalConst(curve.expression);
     if (isNaN(val)) {
-      // Try evaluating as expression (e.g. "pi", "sqrt(2)")
-      try {
-        const evaluated = evaluate(curve.expression);
-        return { def: curve, fn: null, constVal: Number(evaluated) };
-      } catch {
-        throw new Error(`Cannot parse constant: ${curve.expression}`);
-      }
+      throw new Error(`Cannot parse constant: ${curve.expression}`);
     }
     return { def: curve, fn: null, constVal: val };
   }

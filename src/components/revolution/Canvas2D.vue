@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from "vue";
 import type { CurveDefinition, ComputedRegion } from "@/utils/mathEngine";
-import { sampleCurve } from "@/utils/mathEngine";
+import { sampleCurve, evalConst } from "@/utils/mathEngine";
 
 const props = defineProps<{
     curves: CurveDefinition[];
@@ -509,7 +509,7 @@ function drawCurves(
 
             // Handle vertical lines
             if (curve.type === "x_const") {
-                const xVal = parseFloat(curve.expression);
+                const xVal = evalConst(curve.expression);
                 if (!isFinite(xVal)) continue;
 
                 ctx.setLineDash([6, 4]);
@@ -533,7 +533,7 @@ function drawCurves(
                     12,
                 );
             } else if (curve.type === "y_const") {
-                const yVal = parseFloat(curve!.expression);
+                const yVal = evalConst(curve!.expression);
                 if (!isFinite(yVal)) continue;
 
                 ctx.setLineDash([6, 4]);
