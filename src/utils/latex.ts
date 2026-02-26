@@ -159,15 +159,48 @@ export function equationToLatex(raw: string): string | null {
  *
  * This function strips those extra spaces so the LaTeX is clean and
  * portable across renderers.
+ *
+ * ----- Known edge cases & limitations -----
+ *
+ * 1. **Nested functions** — e.g. `sin(sqrt(x))`.  mathjs may produce
+ *    `\sin\left( \sqrt{ x}\right)` with spaces at multiple nesting levels.
+ *    The current regex replacements handle this because they are global and
+ *    not anchored, so every `{ ` and `\left( ` is cleaned regardless of
+ *    nesting depth.
+ *
+ * 2. **Fractions inside exponents** — e.g. `x^(1/2)`.  mathjs renders
+ *    this as `{x}^{ \frac{1}{2}}`.  The `\{\s+` rule strips the leading
+ *    space inside the exponent braces, yielding `{x}^{\frac{1}{2}}`.
+ *    However, *deeply* nested structures like `x^{\frac{1}{\frac{2}{3}}}`
+ *    are handled identically because the regex operates on every `{`
+ *    occurrence globally — no nesting-aware parsing is needed for space
+ *    removal.
+ *
+ * 3. **Content with intentional spaces** — LaTeX constructs like
+ *    `\text{ hello }` would have their leading brace-space stripped to
+ *    `\text{hello }`.  This is acceptable because mathjs `toTex()` does
+ *    not emit `\text{}` blocks, so it cannot occur in practice.
+ *
+ * 4. **Unmatched \left/\right** — If mathjs were to produce an unmatched
+ *    `\right)` without a preceding `\left(`, the space-stripping regex
+ *    would still fire harmlessly. No structural validation is performed
+ *    here; that responsibility lies with mathjs and KaTeX.
+ *
+ * If future mathjs versions change the `toTex()` output format, these
+ * regexes should be reviewed.  Adding targeted regression examples in the
+ * test suite (e.g. for `sin(sqrt(x))`, `x^(1/2)`, `\frac{x}{x+1}^2`)
+ * is recommended.
  */
 function cleanupMathjsTex(tex: string): string {
   // `{ x}` → `{x}`,  `{ x+1}` → `{x+1}`,  etc.
+  // Covers exponent braces, \frac numerator/denominator braces, and more.
   let s = tex.replace(/\{\s+/g, "{");
   // `\left( x\right)` → `\left(x\right)`
+  // Handles function arguments like `\sin\left( x\right)` at any depth.
   s = s.replace(/\\left\(\s+/g, "\\left(");
   // Trailing space before \right: `x \right)` → `x\right)`
   s = s.replace(/\s+\\right/g, "\\right");
-  // `( x)` without \left/\right — rare but possible
+  // `( x)` without \left/\right — rare but possible in simplified output
   s = s.replace(/\(\s+/g, "(");
   return s;
 }

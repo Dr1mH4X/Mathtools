@@ -27,6 +27,7 @@ export type { RevolutionResult } from "./types";
 export type { MeshProfilePoint } from "./types";
 export type { PresetExample } from "./types";
 export type { CompiledCurve } from "./types";
+export type { InverseFunctionOptions } from "./curveEngine";
 
 // ————— LaTeX module —————
 export {

@@ -8,11 +8,24 @@ export interface SEOOptions {
   keywords?: string;
 }
 
+/**
+ * Check whether we are running in a browser environment.
+ * Guards against runtime errors when the composable is used during
+ * SSR, unit tests, or any other non-browser context.
+ */
+function isBrowser(): boolean {
+  return typeof window !== "undefined" && typeof document !== "undefined";
+}
+
 export function useSEO(options?: SEOOptions) {
   const { t, locale } = useI18n();
   const route = useRoute();
 
   watchEffect(() => {
+    // Skip all DOM manipulation when not in a browser environment
+    // (e.g. SSR, unit tests, Node-based tooling).
+    if (!isBrowser()) return;
+
     // 1. Update Document Title
     const baseTitle = t("app.title");
     let pageTitle = "";

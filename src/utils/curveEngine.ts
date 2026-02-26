@@ -137,59 +137,93 @@ export function evalCurve(cc: CompiledCurve, paramValue: number): number {
 
 // ===== Inverse function approximation =====
 
+/** Options for controlling the y-sampling window of `createInverseFunction`. */
+export interface InverseFunctionOptions {
+  /** Lower bound of the y-sampling window (default: -50). */
+  yMin?: number;
+  /** Upper bound of the y-sampling window (default: 50). */
+  yMax?: number;
+  /** Number of evenly-spaced samples within the window (default: 1000). */
+  sampleCount?: number;
+}
+
 /**
  * Create an approximate inverse function for x = g(y).
  * Samples the curve densely over a y-range and returns a function
  * that maps target-x → approximate-y via binary search + interpolation.
+ *
+ * **Limitation:** the default y-sampling window is [-50, 50].  Curves whose
+ * relevant y-range lies outside this window (e.g. `x = e^y` for large x)
+ * will produce no usable samples.  Pass `options.yMin` / `options.yMax` to
+ * widen or shift the window as needed.  If no finite samples are found in
+ * the window the function throws instead of silently returning `NaN`.
  */
 export function createInverseFunction(
   cc: CompiledCurve,
+  options?: InverseFunctionOptions,
 ): (x: number) => number {
-  const sampleCount = 1000;
-  const yGuessMin = -50;
-  const yGuessMax = 50;
+  const sampleCount = options?.sampleCount ?? 1000;
+  const yGuessMin = options?.yMin ?? -50;
+  const yGuessMax = options?.yMax ?? 50;
   const dy = (yGuessMax - yGuessMin) / sampleCount;
 
   const samples: { x: number; y: number }[] = [];
 
+  // Sample x = g(y) over the y-window, keeping only finite x-values.
   for (let i = 0; i <= sampleCount; i++) {
     const y = yGuessMin + i * dy;
     const x = evalCurve(cc, y);
-    if (isFinite(x)) {
+    if (Number.isFinite(x)) {
       samples.push({ x, y });
     }
   }
 
-  // Sort by x for binary search
+  // If we collected no finite samples at all, fail clearly instead of
+  // returning NaN from the inverse function.
+  if (samples.length === 0) {
+    throw new Error(
+      `createInverseFunction: no finite samples found in y-range [${yGuessMin}, ${yGuessMax}]. ` +
+        "The curve may lie outside this window; consider widening the sampling range via options.yMin / options.yMax.",
+    );
+  }
+
+  // Sort samples by x so we can binary-search by target x.
   samples.sort((a, b) => a.x - b.x);
 
-  return (targetX: number): number => {
-    if (samples.length < 2) return NaN;
+  const xs = samples.map((s) => s.x);
+  const ys = samples.map((s) => s.y);
 
-    const firstSample = samples[0]!;
-    const lastSample = samples[samples.length - 1]!;
-
-    if (targetX <= firstSample.x) return firstSample.y;
-    if (targetX >= lastSample.x) return lastSample.y;
-
-    // Binary search for interval
+  return function inverse(targetX: number): number {
     let lo = 0;
-    let hi = samples.length - 1;
+    let hi = xs.length - 1;
 
+    // Clamp outside sampled range to nearest endpoint.
+    if (targetX <= xs[lo]!) return ys[lo]!;
+    if (targetX >= xs[hi]!) return ys[hi]!;
+
+    // Binary search for the bracketing indices [lo, hi].
     while (hi - lo > 1) {
-      const mid = Math.floor((lo + hi) / 2);
-      const midSample = samples[mid]!;
-      if (midSample.x <= targetX) {
+      const mid = (lo + hi) >> 1;
+      const midX = xs[mid]!;
+
+      if (midX === targetX) return ys[mid]!;
+      if (midX < targetX) {
         lo = mid;
       } else {
         hi = mid;
       }
     }
 
-    const loSample = samples[lo]!;
-    const hiSample = samples[hi]!;
-    const t = (targetX - loSample.x) / (hiSample.x - loSample.x || 1);
-    return loSample.y + t * (hiSample.y - loSample.y);
+    const x0 = xs[lo]!;
+    const x1 = xs[hi]!;
+    const y0 = ys[lo]!;
+    const y1 = ys[hi]!;
+
+    // Guard against degenerate interval; fall back to y0 in that case.
+    if (x1 === x0) return y0;
+
+    const t = (targetX - x0) / (x1 - x0);
+    return y0 + t * (y1 - y0);
   };
 }
 
