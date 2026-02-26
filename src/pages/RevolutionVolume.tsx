@@ -96,6 +96,7 @@ export default function RevolutionVolume() {
   const threeContainerRef = useRef<HTMLDivElement>(null);
   const threeSceneRef = useRef<ReturnType<typeof useThreeScene> | null>(null);
   const canvas2DRef = useRef<Canvas2DHandle>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
 
   // Initialize Three.js scene — Strict Mode safe
   useEffect(() => {
@@ -151,11 +152,13 @@ export default function RevolutionVolume() {
     }
   }, [curveInputs, isGenerated]);
 
-  // Disable right-click on the entire revolution page
+  // Disable right-click only on the 2D/3D viewport container (not the whole page)
   useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
     const handler = (e: MouseEvent) => e.preventDefault();
-    document.addEventListener("contextmenu", handler);
-    return () => document.removeEventListener("contextmenu", handler);
+    el.addEventListener("contextmenu", handler);
+    return () => el.removeEventListener("contextmenu", handler);
   }, []);
 
   const parsedCurves = useMemo(() => {
@@ -313,8 +316,8 @@ export default function RevolutionVolume() {
 
   const handleReset = () => {
     setCurveInputs([
-      { id: makeId(), equation: "", color: defaultCurveColors[0] },
-      { id: makeId(), equation: "", color: defaultCurveColors[1] },
+      { id: makeId(), equation: "y = x^2", color: defaultCurveColors[0] },
+      { id: makeId(), equation: "y = x", color: defaultCurveColors[1] },
     ]);
     setXMin(0);
     setXMax(1);
@@ -903,7 +906,10 @@ export default function RevolutionVolume() {
                   : "16px",
             }}
           >
-            <div className="w-full h-full rounded-xl overflow-hidden border border-border shadow-sm relative">
+            <div
+              ref={viewportRef}
+              className="w-full h-full rounded-xl overflow-hidden border border-border shadow-sm relative"
+            >
               {/* 3D View (inside the card) */}
               <div
                 ref={threeContainerRef}
