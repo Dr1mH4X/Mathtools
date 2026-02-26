@@ -1,7 +1,25 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from "vue";
+import { evaluate } from "mathjs";
 import type { CurveDefinition, ComputedRegion } from "@/utils/mathEngine";
 import { sampleCurve } from "@/utils/mathEngine";
+
+/**
+ * Safely evaluate a constant expression string to a finite number.
+ * Handles plain numbers ("0.5"), mathjs expressions ("((1)/(2))"),
+ * and symbolic constants ("pi", "sqrt(2)").
+ * Returns NaN if the expression cannot be evaluated to a finite number.
+ */
+function evalConst(expr: string): number {
+    const simple = parseFloat(expr);
+    if (isFinite(simple)) return simple;
+    try {
+        const result = Number(evaluate(expr));
+        return isFinite(result) ? result : NaN;
+    } catch {
+        return NaN;
+    }
+}
 
 const props = defineProps<{
     curves: CurveDefinition[];
@@ -509,7 +527,7 @@ function drawCurves(
 
             // Handle vertical lines
             if (curve.type === "x_const") {
-                const xVal = parseFloat(curve.expression);
+                const xVal = evalConst(curve.expression);
                 if (!isFinite(xVal)) continue;
 
                 ctx.setLineDash([6, 4]);
@@ -533,7 +551,7 @@ function drawCurves(
                     12,
                 );
             } else if (curve.type === "y_const") {
-                const yVal = parseFloat(curve!.expression);
+                const yVal = evalConst(curve!.expression);
                 if (!isFinite(yVal)) continue;
 
                 ctx.setLineDash([6, 4]);
