@@ -1,6 +1,5 @@
-import { watchEffect } from "vue";
-import { useI18n } from "vue-i18n";
-import { useRoute } from "vue-router";
+import { t, getLocale, onLocaleChange } from "@/i18n";
+import router from "@/router";
 
 export interface SEOOptions {
   titleKey?: string;
@@ -17,14 +16,18 @@ function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof document !== "undefined";
 }
 
-export function useSEO(options?: SEOOptions) {
-  const { t, locale } = useI18n();
-  const route = useRoute();
-
-  watchEffect(() => {
-    // Skip all DOM manipulation when not in a browser environment
-    // (e.g. SSR, unit tests, Node-based tooling).
+/**
+ * Pure-TS replacement for the Vue composable `useSEO`.
+ * Call once (e.g. on app bootstrap) — it subscribes to route and locale
+ * changes and keeps the document meta tags in sync.
+ *
+ * Returns a cleanup function that removes the listeners.
+ */
+export function initSEO(options?: SEOOptions): () => void {
+  function update(): void {
     if (!isBrowser()) return;
+
+    const route = router.currentRoute();
 
     // 1. Update Document Title
     const baseTitle = t("app.title");
@@ -68,8 +71,9 @@ export function useSEO(options?: SEOOptions) {
     // 3. Update Meta Keywords (Bilingual Support)
     let keywords = options?.keywords;
     if (!keywords) {
+      const locale = getLocale();
       keywords =
-        locale.value === "zh"
+        locale === "zh"
           ? "数学工具, 可视化, 旋转体体积, 交互式数学, 3D数学, 微积分, 函数绘图, MathTools"
           : "math tools, visualization, volume of revolution, interactive math, 3D math, calculus, function graphing, MathTools";
     }
@@ -119,6 +123,18 @@ export function useSEO(options?: SEOOptions) {
     }
 
     // 5. Update HTML lang attribute for SEO
-    document.documentElement.setAttribute("lang", locale.value);
-  });
+    document.documentElement.setAttribute("lang", getLocale());
+  }
+
+  // Run immediately
+  update();
+
+  // Subscribe to changes
+  const unsubRoute = router.onChange(() => update());
+  const unsubLocale = onLocaleChange(() => update());
+
+  return () => {
+    unsubRoute();
+    unsubLocale();
+  };
 }

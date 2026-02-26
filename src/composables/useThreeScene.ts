@@ -1,4 +1,3 @@
-import { ref, onUnmounted, type Ref } from "vue";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { ComputedRegion, RotationAxis } from "@/utils/mathEngine";
@@ -34,11 +33,11 @@ export const defaultDisplayOptions: DisplayOptions = {
 };
 
 export function useThreeScene(
-  containerRef: Ref<HTMLElement | null>,
+  getContainer: () => HTMLElement | null,
   options: ThreeSceneOptions = {},
 ) {
-  const isReady = ref(false);
-  const isAnimating = ref(false);
+  let isReady = false;
+  let isAnimating = false;
 
   let renderer: THREE.WebGLRenderer | null = null;
   let scene: THREE.Scene | null = null;
@@ -61,8 +60,16 @@ export function useThreeScene(
   let animationStartTime = 0;
   let animationDuration = 2000; // ms for full rotation
 
+  function getIsReady(): boolean {
+    return isReady;
+  }
+
+  function getIsAnimating(): boolean {
+    return isAnimating;
+  }
+
   function init() {
-    const container = containerRef.value;
+    const container = getContainer();
     if (!container) return;
 
     const width = container.clientWidth;
@@ -123,7 +130,7 @@ export function useThreeScene(
     setupAxes();
     setupGrid();
 
-    isReady.value = true;
+    isReady = true;
     startRenderLoop();
 
     // Resize observer
@@ -137,7 +144,7 @@ export function useThreeScene(
   }
 
   function handleResize() {
-    const container = containerRef.value;
+    const container = getContainer();
     if (!container || !renderer || !camera) return;
 
     const width = container.clientWidth;
@@ -157,7 +164,7 @@ export function useThreeScene(
       if (!renderer || !scene || !camera || !controls) return;
 
       // Handle rotation animation
-      if (isAnimating.value && currentRegion) {
+      if (isAnimating && currentRegion) {
         const elapsed = performance.now() - animationStartTime;
         const progress = Math.min(elapsed / animationDuration, 1);
         const easedProgress = easeInOutCubic(progress);
@@ -166,7 +173,7 @@ export function useThreeScene(
         updateSolidAngle(angle);
 
         if (progress >= 1) {
-          isAnimating.value = false;
+          isAnimating = false;
         }
       }
 
@@ -693,11 +700,11 @@ export function useThreeScene(
 
     animationDuration = duration;
     animationStartTime = performance.now();
-    isAnimating.value = true;
+    isAnimating = true;
   }
 
   function stopAnimation() {
-    isAnimating.value = false;
+    isAnimating = false;
     // Rebuild with full angle
     if (currentRegion) {
       buildSolid(
@@ -782,7 +789,7 @@ export function useThreeScene(
     }
 
     if (renderer) {
-      const container = containerRef.value;
+      const container = getContainer();
       if (container) {
         try {
           container.removeChild(renderer.domElement);
@@ -801,7 +808,7 @@ export function useThreeScene(
 
     scene = null;
     camera = null;
-    isReady.value = false;
+    isReady = false;
   }
 
   // ===== Update background color to match theme =====
@@ -830,13 +837,9 @@ export function useThreeScene(
     }
   }
 
-  onUnmounted(() => {
-    dispose();
-  });
-
   return {
-    isReady,
-    isAnimating,
+    getIsReady,
+    getIsAnimating,
     init,
     dispose,
     buildSolid,

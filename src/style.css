@@ -455,3 +455,259 @@
         display: none !important;
     }
 }
+
+/* ===================================================================
+   Component styles (migrated from scoped Vue SFCs)
+   =================================================================== */
+
+/* --- AppHeader: Nav links --- */
+.nav-link {
+    @apply px-3.5 py-1.5 text-[0.85rem] font-medium text-text-soft
+           rounded-sm no-underline transition-all duration-200 ease-in-out;
+}
+.nav-link:hover {
+    @apply text-text bg-bg-hover;
+}
+.nav-link-active {
+    @apply !text-primary bg-primary-bg;
+}
+
+/* --- AppHeader: icon buttons --- */
+.header-btn {
+    @apply inline-flex items-center justify-center w-9 h-9
+           border border-border rounded-sm bg-bg-soft text-text-soft
+           cursor-pointer p-0 transition-all duration-200 ease-in-out;
+}
+.header-btn:hover {
+    @apply bg-bg-hover text-text border-text-muted;
+}
+
+/* --- AppHeader: Hamburger --- */
+.hamburger {
+    @apply flex flex-col justify-center items-center gap-[5px]
+           w-9 h-9 border border-border rounded-sm bg-bg-soft
+           cursor-pointer p-0 transition-all duration-200 ease-in-out;
+}
+.hamburger span {
+    @apply block w-[18px] h-0.5 bg-text-soft rounded-xs;
+    transition: all 0.25s ease;
+}
+.hamburger.active span:nth-child(1) {
+    transform: translateY(7px) rotate(45deg);
+}
+.hamburger.active span:nth-child(2) {
+    @apply opacity-0;
+}
+.hamburger.active span:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg);
+}
+
+/* --- AppHeader: Mobile nav links --- */
+.mobile-nav-link {
+    @apply px-4 py-3 text-[0.9rem] font-medium text-text-soft
+           rounded-sm cursor-pointer no-underline
+           transition-all duration-200 ease-in-out;
+}
+.mobile-nav-link:hover,
+.mobile-nav-link.active {
+    @apply text-primary bg-primary-bg;
+}
+
+/* --- Home: Hero gradient title --- */
+.hero-title-gradient {
+    background: linear-gradient(
+        135deg,
+        var(--c-text) 0%,
+        var(--c-primary) 100%
+    );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* --- Home: Float animations --- */
+@keyframes float {
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+    }
+    33% {
+        transform: translate(15px, -20px) scale(1.05);
+    }
+    66% {
+        transform: translate(-10px, 10px) scale(0.97);
+    }
+}
+.animate-float {
+    animation: float 12s ease-in-out infinite;
+}
+.animate-float-reverse {
+    animation: float 15s ease-in-out infinite reverse;
+}
+.animate-float-delayed {
+    animation: float 10s ease-in-out infinite 2s;
+}
+
+/* --- Home: Opacity helper --- */
+.opacity-12 {
+    opacity: 0.12;
+}
+
+/* --- Home: Tool cards --- */
+.tool-card {
+    @apply flex items-center gap-4 px-6 py-5 cursor-pointer select-none
+           transition-all duration-200 ease-in-out;
+}
+.tool-card:hover {
+    @apply border-primary-border shadow-md;
+    transform: translateY(-2px);
+}
+.tool-card:active {
+    transform: translateY(0);
+}
+.tool-card--disabled {
+    @apply opacity-60 cursor-default;
+}
+.tool-card--disabled:hover {
+    @apply border-border shadow-card;
+    transform: none;
+}
+.tool-card__arrow {
+    transition: transform 0.2s ease;
+}
+.tool-card:hover .tool-card__arrow {
+    transform: translateX(3px);
+    @apply text-primary;
+}
+
+/* --- PlaceholderPage: Bounce animation --- */
+@keyframes bounce-slow {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+.animate-bounce-slow {
+    animation: bounce-slow 2s ease-in-out infinite;
+}
+
+/* --- RevolutionVolume: Axis toggle buttons --- */
+.axis-btn {
+    @apply flex-1 flex items-center justify-center gap-1.5
+           px-3 py-2.5 text-[0.82rem] font-medium
+           border-2 border-border rounded-sm bg-bg-input
+           text-text-soft cursor-pointer
+           transition-all duration-200 ease-in-out;
+    font-family: var(--font-sans);
+}
+.axis-btn:hover {
+    @apply border-primary-border text-text;
+}
+.axis-btn.active {
+    @apply border-primary bg-primary-bg text-primary;
+}
+
+/* --- RevolutionVolume: Mode toggle buttons --- */
+.mode-btn {
+    @apply flex-1 px-2 py-1.5 text-[0.78rem] font-medium text-center
+           border border-border rounded-sm bg-bg-input text-text-soft
+           cursor-pointer transition-all duration-200 ease-in-out;
+    font-family: var(--font-sans);
+}
+.mode-btn:hover {
+    @apply border-primary-border;
+}
+.mode-btn.active {
+    @apply border-primary bg-primary-bg text-primary font-semibold;
+}
+
+/* --- RevolutionVolume: Preset buttons --- */
+.preset-btn {
+    @apply text-left px-3.5 py-2.5 border border-border rounded-sm
+           bg-bg-input cursor-pointer transition-all duration-200 ease-in-out;
+    font-family: var(--font-sans);
+    contain: content;
+}
+.preset-btn:hover,
+.preset-btn:active {
+    @apply border-primary-border bg-primary-bg;
+}
+
+/* --- RevolutionVolume: View tabs --- */
+.view-tab {
+    @apply flex items-center gap-1.5 px-4 py-[7px]
+           text-[0.82rem] font-medium border border-transparent
+           rounded-sm bg-transparent text-text-soft cursor-pointer
+           transition-all duration-200 ease-in-out;
+    font-family: var(--font-sans);
+}
+.view-tab:hover {
+    @apply bg-bg-hover text-text;
+}
+.view-tab.active {
+    @apply bg-primary-bg text-primary border-primary-border font-semibold;
+}
+
+/* --- RevolutionVolume: LaTeX preview --- */
+.latex-preview {
+    @apply px-2 py-1 bg-bg-hover rounded-sm text-[0.85rem] leading-relaxed overflow-x-auto;
+}
+.latex-preview .katex-mathml {
+    @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+    clip: rect(0, 0, 0, 0);
+}
+.latex-preview .katex {
+    font-size: 0.95em;
+}
+
+/* --- RevolutionVolume: KaTeX result areas --- */
+.katex-result .katex-display {
+    margin: 0 !important;
+    text-align: left;
+}
+.katex-result .katex-mathml {
+    @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+    clip: rect(0, 0, 0, 0);
+}
+
+/* --- RevolutionVolume: Result label --- */
+.result-label {
+    @apply text-[0.78rem] font-semibold uppercase tracking-wide mb-1.5
+           flex items-center gap-2;
+}
+
+/* --- RevolutionVolume: Copy button --- */
+.copy-btn {
+    @apply inline-flex items-center gap-1 bg-transparent border-none
+           cursor-pointer px-1 py-0.5 text-text-muted text-[0.72rem]
+           transition-colors duration-200 ease-in-out;
+    font-family: var(--font-sans);
+}
+.copy-btn:hover {
+    @apply text-primary;
+}
+
+/* --- RevolutionVolume: Spinner --- */
+.spinner {
+    @apply w-3.5 h-3.5 border-2 border-border rounded-full;
+    border-top-color: var(--c-primary);
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* --- Canvas2D: Control buttons --- */
+.canvas-ctrl-btn {
+    @apply w-[30px] h-[30px] p-0 flex items-center justify-center
+         bg-bg-soft border border-border rounded-sm
+         opacity-75 cursor-pointer transition-opacity duration-150 ease-in-out;
+}
+.canvas-ctrl-btn:hover {
+    @apply opacity-100;
+}
