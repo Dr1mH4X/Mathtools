@@ -1,9 +1,10 @@
 import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
 
 export default defineConfig({
-  plugins: [tailwindcss()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),
@@ -21,6 +22,7 @@ export default defineConfig({
           three: ["three"],
           mathjs: ["mathjs"],
           katex: ["katex"],
+          react: ["react", "react-dom", "react-router-dom"],
         },
       },
     },

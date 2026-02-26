@@ -78,15 +78,25 @@ function computeVolumeAroundX(
 
       const d1 = Math.abs(yUp - axisValue);
       const d2 = Math.abs(yLo - axisValue);
-      const R = Math.max(d1, d2);
-      const r = Math.min(d1, d2);
 
-      // If the axis is between the curves, the inner radius is 0
+      let R: number;
+      let r: number;
+
+      // FIXED: Correctly determine inner and outer radii
+      // The axis can be: below both curves, above both curves, or between them
       if (
         (axisValue >= yLo && axisValue <= yUp) ||
         (axisValue >= yUp && axisValue <= yLo)
       ) {
-        return R * R;
+        // Axis is between the curves - solid disk (no hole)
+        R = Math.max(d1, d2);
+        r = 0;
+      } else {
+        // Axis is outside - washer with hole
+        // Outer radius: distance to the curve FARTHER from axis
+        // Inner radius: distance to the curve CLOSER to axis
+        R = Math.max(d1, d2);
+        r = Math.min(d1, d2);
       }
 
       return R * R - r * r;

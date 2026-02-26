@@ -14,10 +14,38 @@
     "footer": "数学工具箱 — 让数学可视化"
   },
   "home": {
-    "hero": "可视化探索数学",
+    "hero": {
+      "title": "交互式数学工具",
+      "subtitle": "通过我们强大的工具套件，可视化、计算和探索数学概念。"
+    },
     "heroDesc": "一系列交互式工具，帮助你理解和可视化数学概念。",
-    "tools": "工具",
-    "comingSoon": "即将推出"
+    "comingSoon": "该功能正在开发中，将在未来的更新中推出。",
+    "tools": {
+      "revolution": {
+        "title": "旋转体体积",
+        "desc": "定义曲线构成二维区域，然后绕轴旋转以可视化三维立体并计算其体积。"
+      },
+      "matrix": {
+        "title": "矩阵计算器",
+        "desc": "执行矩阵运算，包括加法、乘法、求逆、行列式等。"
+      },
+      "graphing": {
+        "title": "函数绘图",
+        "desc": "绘制并探索数学函数图像，支持多种函数类型。"
+      },
+      "derivatives": {
+        "title": "导数与积分",
+        "desc": "计算导数和积分，可视化变化率和累积量。"
+      },
+      "geometry": {
+        "title": "几何工具",
+        "desc": "探索几何图形、变换和空间关系。"
+      },
+      "statistics": {
+        "title": "统计学",
+        "desc": "分析数据集，计算统计量并生成可视化图表。"
+      }
+    }
   },
   "revolution": {
     "title": "旋转体体积",
@@ -46,8 +74,8 @@
     },
     "axis": {
       "title": "旋转轴",
-      "xAxis": "绕 X 轴旋转",
-      "yAxis": "绕 Y 轴旋转",
+      "xAxis": "X 轴 (y=c)",
+      "yAxis": "Y 轴 (x=c)",
       "custom": "自定义轴",
       "axisValue": "轴位置"
     },
@@ -115,6 +143,8 @@
     "close": "关闭",
     "apply": "应用",
     "cancel": "取消",
-    "language": "语言"
+    "language": "语言",
+    "comingSoon": "即将推出",
+    "tryNow": "立即体验"
   }
 }
