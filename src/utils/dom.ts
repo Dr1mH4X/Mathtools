@@ -3,7 +3,14 @@
 //
 // Provides a concise API for creating and updating DOM elements
 // without any framework dependency. Inspired by hyperscript.
+//
+// NOTE: The `safeHTML` attribute pipes its value through DOMPurify
+// before assigning to `el.innerHTML`, so callers do not need to
+// sanitize manually. Raw `innerHTML` is intentionally NOT exposed
+// to prevent accidental XSS.
 // ===================================================================
+
+import DOMPurify from "dompurify";
 
 export type Child = Node | string | number | null | undefined | false;
 export type Children = Child | Child[];
@@ -14,7 +21,14 @@ export interface Attrs {
   dataset?: Record<string, string>;
   on?: Record<string, EventListener>;
   ref?: (el: HTMLElement) => void;
-  innerHTML?: string;
+  /**
+   * Sets `el.innerHTML` after sanitizing through DOMPurify.
+   *
+   * Use this instead of raw `innerHTML` to prevent XSS when the
+   * content originates from user input, library output (KaTeX, etc.),
+   * or any other potentially-untrusted source.
+   */
+  safeHTML?: string;
   [key: string]: unknown;
 }
 
@@ -103,8 +117,9 @@ export function applyAttrs<T extends HTMLElement>(el: T, attrs: Attrs): T {
         }
         break;
 
-      case "innerHTML":
-        el.innerHTML = value as string;
+      case "safeHTML":
+        // Always sanitize before assigning to innerHTML to prevent XSS.
+        el.innerHTML = DOMPurify.sanitize(value as string);
         break;
 
       default:
@@ -158,7 +173,10 @@ export function clearElement(el: HTMLElement): void {
 /**
  * Replace all children of an element with new content.
  */
-export function replaceChildren(el: HTMLElement, ...children: Children[]): void {
+export function replaceChildren(
+  el: HTMLElement,
+  ...children: Children[]
+): void {
   clearElement(el);
   appendChildren(el, children);
 }
@@ -212,6 +230,17 @@ export function on<K extends keyof HTMLElementEventMap>(
 ): () => void {
   el.addEventListener(event, handler as EventListener, options);
   return () => el.removeEventListener(event, handler as EventListener, options);
+}
+
+/**
+ * Sanitize an HTML string via DOMPurify and assign it to `el.innerHTML`.
+ *
+ * Use this for any imperative innerHTML assignment instead of writing
+ * `el.innerHTML = …` directly, so that every path goes through
+ * DOMPurify and static-analysis tools won't flag a raw innerHTML sink.
+ */
+export function setSafeHTML(el: HTMLElement, html: string): void {
+  el.innerHTML = DOMPurify.sanitize(html);
 }
 
 /**

@@ -32,7 +32,7 @@ import {
   type RevolutionResult,
 } from "@/utils/mathEngine";
 
-import { h, clearElement } from "@/utils/dom";
+import { h, clearElement, setSafeHTML } from "@/utils/dom";
 import {
   icon,
   Activity,
@@ -105,8 +105,10 @@ let resultCollapsed = false;
 let threeContainerEl: HTMLElement | null = null;
 let threeScene: ReturnType<typeof useThreeScene> | null = null;
 
-// Canvas2D instance
+// Canvas2D — persistent across renderMain() calls so that viewport state
+// (pan / zoom) is preserved and observer / listener churn is avoided.
 let canvas2dInstance: Canvas2DInstance | null = null;
+let canvas2dContainerEl: HTMLElement | null = null;
 
 // DOM element references for dynamic updates
 let rootEl: HTMLElement | null = null;
@@ -470,7 +472,8 @@ function buildCurvesSection(): HTMLElement {
             const tex = equationToLatex(curve.equation);
             if (tex) {
               try {
-                previewEl.innerHTML = DOMPurify.sanitize(
+                setSafeHTML(
+                  previewEl,
                   katex.renderToString(tex, {
                     throwOnError: false,
                     displayMode: false,
@@ -513,7 +516,7 @@ function buildCurvesSection(): HTMLElement {
     const latexPreview = h("div", {
       class: "latex-preview",
       style: latexMap[curve.id] ? "" : "display:none",
-      innerHTML: latexMap[curve.id] || "",
+      safeHTML: latexMap[curve.id] || "",
     });
 
     const textBlock = h(
@@ -1203,16 +1206,31 @@ function build3DView(): HTMLElement {
 }
 
 function build2DView(): HTMLElement {
-  const container = h("div", {
+  // If the persistent container already exists, just re-parent it and
+  // push the latest props — no destroy / re-create needed.
+  if (canvas2dContainerEl && canvas2dInstance) {
+    // Detach from old parent if still attached
+    if (canvas2dContainerEl.parentNode) {
+      canvas2dContainerEl.parentNode.removeChild(canvas2dContainerEl);
+    }
+    canvas2dContainerEl.style.display = activeView === "2d" ? "" : "none";
+    // Push latest props without resetting viewport state
+    canvas2dInstance.update({
+      curves: getParsedCurves(),
+      region,
+      xMin,
+      xMax,
+      axis,
+      axisValue,
+    });
+    return canvas2dContainerEl;
+  }
+
+  // First mount — create the wrapper and the Canvas2D instance once.
+  canvas2dContainerEl = h("div", {
     class: "flex-1 relative min-h-0 overflow-hidden bg-bg max-lg:min-h-[300px]",
     style: activeView === "2d" ? "" : "display:none",
   });
-
-  // Mount or re-mount Canvas2D
-  if (canvas2dInstance) {
-    canvas2dInstance.destroy();
-    canvas2dInstance = null;
-  }
 
   const canvasProps: Canvas2DProps = {
     curves: getParsedCurves(),
@@ -1223,9 +1241,9 @@ function build2DView(): HTMLElement {
     axisValue,
   };
 
-  canvas2dInstance = createCanvas2D(container, canvasProps);
+  canvas2dInstance = createCanvas2D(canvas2dContainerEl, canvasProps);
 
-  return container;
+  return canvas2dContainerEl;
 }
 
 function buildResultPanel(): HTMLElement | null {
@@ -1286,7 +1304,7 @@ function buildResultPanel(): HTMLElement | null {
     );
     const volumeKatex = h("div", {
       class: "text-[1.1rem] katex-result",
-      innerHTML: getVolumeHtml(),
+      safeHTML: getVolumeHtml(),
     });
     const volumeBlock = h(
       "div",
@@ -1334,7 +1352,7 @@ function buildResultPanel(): HTMLElement | null {
     );
     const formulaKatex = h("div", {
       class: "overflow-x-auto katex-result",
-      innerHTML: getFormulaHtml(),
+      safeHTML: getFormulaHtml(),
     });
     const formulaBlock = h(
       "div",
@@ -1363,15 +1381,12 @@ function buildResultPanel(): HTMLElement | null {
 function renderMain(): void {
   if (!mainContentEl) return;
 
-  // Save three container before clearing
+  // Detach persistent elements before clearing so they survive the wipe.
   if (threeContainerEl && threeContainerEl.parentNode) {
     threeContainerEl.parentNode.removeChild(threeContainerEl);
   }
-
-  // Destroy canvas2d before clearing
-  if (canvas2dInstance) {
-    canvas2dInstance.destroy();
-    canvas2dInstance = null;
+  if (canvas2dContainerEl && canvas2dContainerEl.parentNode) {
+    canvas2dContainerEl.parentNode.removeChild(canvas2dContainerEl);
   }
 
   clearElement(mainContentEl);
@@ -1416,6 +1431,7 @@ export function mountRevolutionVolumePage(container: HTMLElement): () => void {
   isGenerated = false;
   resultCollapsed = false;
   threeContainerEl = null;
+  canvas2dContainerEl = null;
 
   // Root layout
   rootEl = h("div", {
@@ -1487,6 +1503,7 @@ export function mountRevolutionVolumePage(container: HTMLElement): () => void {
     if (canvas2dInstance) {
       canvas2dInstance.destroy();
       canvas2dInstance = null;
+      canvas2dContainerEl = null;
     }
 
     if (threeScene) {

@@ -6,7 +6,7 @@
 
 import { createAppHeader } from "@/components/layout/AppHeader";
 import { initSEO } from "@/composables/useSEO";
-import router from "@/router";
+import router, { initRouter, disposeRouter } from "@/router";
 import { mountHomePage } from "@/pages/Home";
 import { mountPlaceholderPage } from "@/pages/PlaceholderPage";
 import { mountRevolutionVolumePage } from "@/pages/RevolutionVolume";
@@ -77,6 +77,9 @@ router.onChange(() => {
   renderPage();
 });
 
+// ---- Initialise router (registers hashchange listener) ----
+initRouter();
+
 // Initial render
 renderPage();
 
@@ -90,5 +93,6 @@ if (import.meta.hot) {
     }
     cleanupHeader();
     cleanupSEO();
+    disposeRouter();
   });
 }

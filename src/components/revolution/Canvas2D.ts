@@ -20,7 +20,14 @@ export interface Canvas2DProps {
 export interface Canvas2DInstance {
   resetView: () => void;
   draw: () => void;
+  /** Repaint with current props without resetting viewport state. */
+  redraw: () => void;
   destroy: () => void;
+  /**
+   * Push new props. Resets viewport (pan/zoom) only when the underlying
+   * data actually changed (curves, region, bounds, axis); otherwise just
+   * redraws with the existing viewport transform.
+   */
   update: (props: Canvas2DProps) => void;
 }
 
@@ -58,6 +65,85 @@ export function createCanvas2D(
   let pinchStartScale = 1;
   let lastTouchCenter: { x: number; y: number } | null = null;
 
+  // ---- SVG helpers ----
+  const SVG_NS = "http://www.w3.org/2000/svg";
+
+  /** Create an SVG element with common icon attributes already set. */
+  function svgIcon(): SVGSVGElement {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("width", "14");
+    svg.setAttribute("height", "14");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    return svg;
+  }
+
+  /** Append an SVG child element with the given attributes. */
+  function svgChild(
+    parent: SVGElement,
+    tag: string,
+    attrs: Record<string, string>,
+  ): SVGElement {
+    const el = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      el.setAttribute(k, v);
+    }
+    parent.appendChild(el);
+    return el;
+  }
+
+  function buildResetSvg(): SVGSVGElement {
+    const svg = svgIcon();
+    svgChild(svg, "path", {
+      d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8",
+    });
+    svgChild(svg, "path", { d: "M3 3v5h5" });
+    return svg;
+  }
+
+  function buildZoomInSvg(): SVGSVGElement {
+    const svg = svgIcon();
+    svgChild(svg, "circle", { cx: "11", cy: "11", r: "8" });
+    svgChild(svg, "line", {
+      x1: "21",
+      y1: "21",
+      x2: "16.65",
+      y2: "16.65",
+    });
+    svgChild(svg, "line", { x1: "11", y1: "8", x2: "11", y2: "14" });
+    svgChild(svg, "line", { x1: "8", y1: "11", x2: "14", y2: "11" });
+    return svg;
+  }
+
+  function buildZoomOutSvg(): SVGSVGElement {
+    const svg = svgIcon();
+    svgChild(svg, "circle", { cx: "11", cy: "11", r: "8" });
+    svgChild(svg, "line", {
+      x1: "21",
+      y1: "21",
+      x2: "16.65",
+      y2: "16.65",
+    });
+    svgChild(svg, "line", { x1: "8", y1: "11", x2: "14", y2: "11" });
+    return svg;
+  }
+
+  // ---- Helper: create control button ----
+  function createCtrlButton(
+    svgElement: SVGSVGElement,
+    title: string,
+  ): HTMLButtonElement {
+    const btn = document.createElement("button");
+    btn.className = "canvas-ctrl-btn";
+    btn.title = title;
+    btn.appendChild(svgElement);
+    return btn;
+  }
+
   // ---- DOM elements ----
   const containerRef = document.createElement("div");
   containerRef.className =
@@ -74,27 +160,18 @@ export function createCanvas2D(
     "absolute top-2.5 right-2.5 flex flex-col gap-1 z-[5]";
 
   // Reset view button
-  const resetBtn = createCtrlButton(
-    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`,
-    "Reset view",
-  );
+  const resetBtn = createCtrlButton(buildResetSvg(), "Reset view");
   resetBtn.addEventListener("click", () => resetView());
 
   // Zoom in button
-  const zoomInBtn = createCtrlButton(
-    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>`,
-    "Zoom in",
-  );
+  const zoomInBtn = createCtrlButton(buildZoomInSvg(), "Zoom in");
   zoomInBtn.addEventListener("click", () => {
     viewScale *= 1.2;
     draw();
   });
 
   // Zoom out button
-  const zoomOutBtn = createCtrlButton(
-    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>`,
-    "Zoom out",
-  );
+  const zoomOutBtn = createCtrlButton(buildZoomOutSvg(), "Zoom out");
   zoomOutBtn.addEventListener("click", () => {
     viewScale *= 0.8;
     draw();
@@ -106,15 +183,6 @@ export function createCanvas2D(
   containerRef.appendChild(ctrlContainer);
 
   parent.appendChild(containerRef);
-
-  // ---- Helper: create control button ----
-  function createCtrlButton(svgHtml: string, title: string): HTMLButtonElement {
-    const btn = document.createElement("button");
-    btn.className = "canvas-ctrl-btn";
-    btn.title = title;
-    btn.innerHTML = svgHtml;
-    return btn;
-  }
 
   // ---- Coordinate transform: math coords -> canvas pixel coords ----
   function mathToCanvas(
@@ -247,12 +315,8 @@ export function createCanvas2D(
     yRange: [number, number],
     isDark: boolean,
   ): void {
-    const gridColor = isDark
-      ? "rgba(255,255,255,0.06)"
-      : "rgba(0,0,0,0.06)";
-    const subGridColor = isDark
-      ? "rgba(255,255,255,0.03)"
-      : "rgba(0,0,0,0.03)";
+    const gridColor = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
+    const subGridColor = isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)";
 
     ctx.lineWidth = 1;
 
@@ -327,9 +391,7 @@ export function createCanvas2D(
     yRange: [number, number],
     isDark: boolean,
   ): void {
-    const axisColor = isDark
-      ? "rgba(255,255,255,0.35)"
-      : "rgba(0,0,0,0.35)";
+    const axisColor = isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.35)";
     ctx.strokeStyle = axisColor;
     ctx.lineWidth = 1.5;
 
@@ -375,9 +437,7 @@ export function createCanvas2D(
     yRange: [number, number],
     isDark: boolean,
   ): void {
-    const textColor = isDark
-      ? "rgba(255,255,255,0.5)"
-      : "rgba(0,0,0,0.5)";
+    const textColor = isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)";
     ctx.fillStyle = textColor;
     ctx.font = '11px -apple-system, "Segoe UI", Roboto, sans-serif';
     ctx.textAlign = "center";
@@ -398,10 +458,7 @@ export function createCanvas2D(
       const { cx } = mathToCanvas(x, 0, padding, xRange, yRange);
       if (cx < 20 || cx > canvasWidth - 20) continue;
 
-      const labelY = Math.min(
-        Math.max(yZero + 6, 4),
-        canvasHeight - 16,
-      );
+      const labelY = Math.min(Math.max(yZero + 6, 4), canvasHeight - 16);
       ctx.fillText(formatTickLabel(x), cx, labelY);
 
       // Tick mark
@@ -423,10 +480,7 @@ export function createCanvas2D(
       const { cy } = mathToCanvas(0, y, padding, xRange, yRange);
       if (cy < 10 || cy > canvasHeight - 10) continue;
 
-      const labelX = Math.min(
-        Math.max(xZero - 6, 30),
-        canvasWidth - 4,
-      );
+      const labelX = Math.min(Math.max(xZero - 6, 30), canvasWidth - 4);
       ctx.fillText(formatTickLabel(y), labelX, cy);
 
       ctx.strokeStyle = textColor;
@@ -605,8 +659,7 @@ export function createCanvas2D(
 
           // Label
           ctx.fillStyle = color!;
-          ctx.font =
-            'bold 12px -apple-system, "Segoe UI", Roboto, sans-serif';
+          ctx.font = 'bold 12px -apple-system, "Segoe UI", Roboto, sans-serif';
           ctx.textAlign = "left";
           ctx.textBaseline = "top";
           ctx.fillText(
@@ -629,8 +682,7 @@ export function createCanvas2D(
 
           // Label
           ctx.fillStyle = color!;
-          ctx.font =
-            'bold 12px -apple-system, "Segoe UI", Roboto, sans-serif';
+          ctx.font = 'bold 12px -apple-system, "Segoe UI", Roboto, sans-serif';
           ctx.textAlign = "left";
           ctx.textBaseline = "bottom";
           ctx.fillText(
@@ -654,10 +706,7 @@ export function createCanvas2D(
             const cp = mathToCanvas(p.x, p.y, padding, xRange, yRange);
 
             // Detect large jumps (discontinuities)
-            if (
-              prevPt &&
-              Math.abs(cp.cy - prevPt.cy) > canvasHeight * 0.8
-            ) {
+            if (prevPt && Math.abs(cp.cy - prevPt.cy) > canvasHeight * 0.8) {
               ctx.stroke();
               ctx.beginPath();
               started = false;
@@ -733,13 +782,7 @@ export function createCanvas2D(
 
     if (props.axis === "x") {
       // Horizontal axis at y = axisValue
-      const { cy } = mathToCanvas(
-        0,
-        props.axisValue,
-        padding,
-        xRange,
-        yRange,
-      );
+      const { cy } = mathToCanvas(0, props.axisValue, padding, xRange, yRange);
       ctx.beginPath();
       ctx.moveTo(0, cy);
       ctx.lineTo(canvasWidth, cy);
@@ -749,8 +792,7 @@ export function createCanvas2D(
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
       ctx.fillStyle = "#ff6b6b";
-      ctx.font =
-        'bold 11px -apple-system, "Segoe UI", Roboto, sans-serif';
+      ctx.font = 'bold 11px -apple-system, "Segoe UI", Roboto, sans-serif';
       ctx.textAlign = "right";
       ctx.textBaseline = "bottom";
       const label =
@@ -760,13 +802,7 @@ export function createCanvas2D(
       ctx.fillText(label, canvasWidth - 8, cy - 4);
     } else {
       // Vertical axis at x = axisValue
-      const { cx } = mathToCanvas(
-        props.axisValue,
-        0,
-        padding,
-        xRange,
-        yRange,
-      );
+      const { cx } = mathToCanvas(props.axisValue, 0, padding, xRange, yRange);
       ctx.beginPath();
       ctx.moveTo(cx, 0);
       ctx.lineTo(cx, canvasHeight);
@@ -776,8 +812,7 @@ export function createCanvas2D(
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
       ctx.fillStyle = "#ff6b6b";
-      ctx.font =
-        'bold 11px -apple-system, "Segoe UI", Roboto, sans-serif';
+      ctx.font = 'bold 11px -apple-system, "Segoe UI", Roboto, sans-serif';
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
       const label =
@@ -1036,12 +1071,56 @@ export function createCanvas2D(
 
   // ===== Public API =====
 
+  /**
+   * Check whether the incoming props represent a meaningful data change
+   * (different curves, region, bounds, or axis) that warrants a viewport
+   * reset, as opposed to a cosmetic re-render (e.g. locale change).
+   */
+  function hasDataChanged(newProps: Canvas2DProps): boolean {
+    if (
+      newProps.xMin !== props.xMin ||
+      newProps.xMax !== props.xMax ||
+      newProps.axis !== props.axis ||
+      newProps.axisValue !== props.axisValue
+    ) {
+      return true;
+    }
+
+    // Region identity — null vs non-null, or different reference
+    if (newProps.region !== props.region) return true;
+
+    // Curves — compare by length then by id + equation
+    if (newProps.curves.length !== props.curves.length) return true;
+    for (let i = 0; i < newProps.curves.length; i++) {
+      const a = newProps.curves[i]!;
+      const b = props.curves[i]!;
+      if (a.id !== b.id || a.equation !== b.equation || a.color !== b.color) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Push new props into the canvas. Resets viewport (pan/zoom) only when
+   * the underlying data actually changed; otherwise just redraws.
+   */
   function update(newProps: Canvas2DProps): void {
+    const changed = hasDataChanged(newProps);
     props = { ...newProps };
-    // Reset view when input changes
-    viewOffsetX = 0;
-    viewOffsetY = 0;
-    viewScale = 1;
+
+    if (changed) {
+      viewOffsetX = 0;
+      viewOffsetY = 0;
+      viewScale = 1;
+    }
+
+    draw();
+  }
+
+  /** Repaint with current props without resetting viewport state. */
+  function redraw(): void {
     draw();
   }
 
@@ -1069,6 +1148,7 @@ export function createCanvas2D(
   return {
     resetView,
     draw,
+    redraw,
     destroy,
     update,
   };

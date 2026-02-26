@@ -1,6 +1,10 @@
 // ===================================================================
 // Pure TypeScript Hash-based SPA Router
 // Replaces vue-router with a minimal implementation.
+//
+// The router does NOT register any global listeners on module load.
+// Call `initRouter()` once at app startup, and `disposeRouter()` to
+// tear down (useful for HMR and tests).
 // ===================================================================
 
 export interface Route {
@@ -47,6 +51,9 @@ const routes: Route[] = [
 ];
 
 const listeners: Array<(route: Route | null) => void> = [];
+
+let initialized = false;
+let removeHashChangeListener: (() => void) | null = null;
 
 function hashToPath(hash: string): string {
   const h = hash.startsWith("#") ? hash.slice(1) : hash;
@@ -95,12 +102,48 @@ function handleHashChange(): void {
   notify();
 }
 
-// Initialize
-window.addEventListener("hashchange", handleHashChange);
+/**
+ * Initialise the router — registers the global `hashchange` listener
+ * and ensures the initial hash is set. Safe to call multiple times;
+ * subsequent calls are no-ops.
+ *
+ * Call once at application startup (after the DOM is ready).
+ */
+export function initRouter(): void {
+  if (initialized) return;
 
-// Ensure initial hash is set
-if (!window.location.hash) {
-  window.location.hash = "/";
+  const listener = () => handleHashChange();
+  window.addEventListener("hashchange", listener);
+  removeHashChangeListener = () =>
+    window.removeEventListener("hashchange", listener);
+
+  // Ensure initial hash is set, or sync to current hash if already present.
+  if (!window.location.hash) {
+    window.location.hash = "/";
+  } else {
+    // Fire an initial sync so that listeners registered before init see the
+    // current route.
+    handleHashChange();
+  }
+
+  initialized = true;
+}
+
+/**
+ * Tear down the router — removes the global `hashchange` listener.
+ * After calling this, `initRouter()` may be called again to re-initialise.
+ *
+ * Useful for HMR dispose hooks and test teardown.
+ */
+export function disposeRouter(): void {
+  if (!initialized) return;
+
+  if (removeHashChangeListener) {
+    removeHashChangeListener();
+    removeHashChangeListener = null;
+  }
+
+  initialized = false;
 }
 
 const router: RouterInstance = {
