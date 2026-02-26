@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import en from "./locales/en.json";
 import zh from "./locales/zh.json";
 
@@ -8,7 +9,7 @@ const messages: Record<Locale, Record<string, unknown>> = { en, zh };
 
 let currentLocale: Locale = getDefaultLocale();
 
-const listeners: Array<() => void> = [];
+const listeners: Set<() => void> = new Set();
 
 function getDefaultLocale(): Locale {
   const saved = localStorage.getItem("mathtools-locale");
@@ -23,12 +24,11 @@ function getDefaultLocale(): Locale {
 }
 
 export function setLocale(locale: Locale): void {
+  if (currentLocale === locale) return;
   currentLocale = locale;
   localStorage.setItem("mathtools-locale", locale);
   document.documentElement.setAttribute("lang", locale);
-  for (const fn of listeners) {
-    fn();
-  }
+  listeners.forEach((fn) => fn());
 }
 
 export function getLocale(): Locale {
@@ -36,10 +36,9 @@ export function getLocale(): Locale {
 }
 
 export function onLocaleChange(fn: () => void): () => void {
-  listeners.push(fn);
+  listeners.add(fn);
   return () => {
-    const idx = listeners.indexOf(fn);
-    if (idx >= 0) listeners.splice(idx, 1);
+    listeners.delete(fn);
   };
 }
 
@@ -107,4 +106,13 @@ export function t(
   return result;
 }
 
-export default { t, setLocale, getLocale, onLocaleChange };
+/**
+ * React hook for internationalization.
+ * Re-renders the component when the locale changes.
+ */
+export function useTranslation() {
+  const locale = useSyncExternalStore(onLocaleChange, getLocale, getLocale);
+  return { t, locale, setLocale };
+}
+
+export default { t, setLocale, getLocale, onLocaleChange, useTranslation };

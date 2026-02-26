@@ -46,8 +46,8 @@
     },
     "axis": {
       "title": "旋转轴",
-      "xAxis": "绕 X 轴旋转",
-      "yAxis": "绕 Y 轴旋转",
+      "xAxis": "X 轴 (y=c)",
+      "yAxis": "Y 轴 (x=c)",
       "custom": "自定义轴",
       "axisValue": "轴位置"
     },

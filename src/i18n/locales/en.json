@@ -46,8 +46,8 @@
     },
     "axis": {
       "title": "Axis of Revolution",
-      "xAxis": "Around X-axis",
-      "yAxis": "Around Y-axis",
+      "xAxis": "X-Axis (y=c)",
+      "yAxis": "Y-Axis (x=c)",
       "custom": "Custom axis",
       "axisValue": "Axis position"
     },
