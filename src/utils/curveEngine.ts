@@ -1,0 +1,355 @@
+import { parse, compile, evaluate } from "mathjs";
+import type {
+  CurveType,
+  CurveDefinition,
+  CompiledCurve,
+  ProfilePoint,
+} from "./types";
+import { normalizeExpression } from "./latex";
+
+// ===================================================================
+// Curve Engine
+//
+// Handles all curve-level operations:
+//   1. parseEquation         — raw equation string → { type, expression }
+//   2. isConstantExpression   — detect if expression has no free variable
+//   3. compileCurve           — CurveDefinition → CompiledCurve (mathjs compiled)
+//   4. evalCurve              — evaluate a compiled curve at a parameter value
+//   5. createInverseFunction  — approximate inverse for x=g(y) curves
+//   6. findIntersectionsXRange — scan+bisect to find intersection x-values
+//   7. sampleCurve            — sample a curve for 2D canvas drawing
+// ===================================================================
+
+// ===== Equation parsing =====
+
+/**
+ * Parse a raw equation string like "y = sqrt(x-1)" or "y = \sqrt{x-1}"
+ * into a CurveType and the RHS expression (mathjs-compatible).
+ */
+export function parseEquation(
+  raw: string,
+): { type: CurveType; expression: string } | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  // Normalize the whole string first to handle LaTeX in the LHS too
+  const normalized = normalizeExpression(trimmed);
+
+  // Match patterns: "y = ...", "x = ..."
+  const yMatch = normalized.match(/^y\s*=\s*(.+)$/i);
+  const xMatch = normalized.match(/^x\s*=\s*(.+)$/i);
+
+  if (yMatch) {
+    const expr = yMatch[1]!.trim();
+    // Determine if it's a constant or a function of x
+    if (isConstantExpression(expr, "x")) {
+      return { type: "y_const", expression: expr };
+    }
+    return { type: "y_of_x", expression: expr };
+  }
+
+  if (xMatch) {
+    const expr = xMatch[1]!.trim();
+    // Determine if it's a constant or a function of y
+    if (isConstantExpression(expr, "y")) {
+      return { type: "x_const", expression: expr };
+    }
+    return { type: "x_of_y", expression: expr };
+  }
+
+  return null;
+}
+
+// ===== Constant detection =====
+
+/**
+ * Check whether an expression is a constant (does not depend on the given variable).
+ * Tries to evaluate the expression without providing the variable.
+ */
+export function isConstantExpression(expr: string, variable: string): boolean {
+  // Quick check: if the expression contains the variable as a standalone token, it's not constant
+  // Use word boundary to avoid false positives like 'x' in 'exp', 'max', 'hex'
+  const varRegex = new RegExp(`(?<![a-zA-Z])${variable}(?![a-zA-Z])`, "g");
+  if (varRegex.test(expr)) {
+    return false;
+  }
+  // Try to evaluate as constant
+  try {
+    const result = evaluate(expr);
+    return isFinite(Number(result));
+  } catch {
+    return false;
+  }
+}
+
+// ===== Compilation & evaluation =====
+
+/**
+ * Compile a CurveDefinition into a CompiledCurve that can be efficiently
+ * evaluated at many parameter values.
+ */
+export function compileCurve(curve: CurveDefinition): CompiledCurve {
+  if (curve.type === "x_const" || curve.type === "y_const") {
+    const val = parseFloat(curve.expression);
+    if (isNaN(val)) {
+      // Try evaluating as expression (e.g. "pi", "sqrt(2)")
+      try {
+        const evaluated = evaluate(curve.expression);
+        return { def: curve, fn: null, constVal: Number(evaluated) };
+      } catch {
+        throw new Error(`Cannot parse constant: ${curve.expression}`);
+      }
+    }
+    return { def: curve, fn: null, constVal: val };
+  }
+
+  try {
+    // Validate the expression parses correctly
+    parse(curve.expression);
+    const compiled = compile(curve.expression);
+    return { def: curve, fn: compiled, constVal: null };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`Cannot parse expression "${curve.expression}": ${msg}`);
+  }
+}
+
+/**
+ * Safely evaluate a compiled curve at a given parameter value.
+ * For y_of_x curves, the parameter is x.
+ * For x_of_y curves, the parameter is y.
+ */
+export function evalCurve(cc: CompiledCurve, paramValue: number): number {
+  if (cc.constVal !== null) {
+    return cc.constVal;
+  }
+  if (!cc.fn) return NaN;
+  try {
+    const varName = cc.def.type === "x_of_y" ? "y" : "x";
+    const result = cc.fn.evaluate({ [varName]: paramValue });
+    const num = Number(result);
+    if (!isFinite(num)) return NaN;
+    return num;
+  } catch {
+    return NaN;
+  }
+}
+
+// ===== Inverse function approximation =====
+
+/**
+ * Create an approximate inverse function for x = g(y).
+ * Samples the curve densely over a y-range and returns a function
+ * that maps target-x → approximate-y via binary search + interpolation.
+ */
+export function createInverseFunction(
+  cc: CompiledCurve,
+): (x: number) => number {
+  const sampleCount = 1000;
+  const yGuessMin = -50;
+  const yGuessMax = 50;
+  const dy = (yGuessMax - yGuessMin) / sampleCount;
+
+  const samples: { x: number; y: number }[] = [];
+
+  for (let i = 0; i <= sampleCount; i++) {
+    const y = yGuessMin + i * dy;
+    const x = evalCurve(cc, y);
+    if (isFinite(x)) {
+      samples.push({ x, y });
+    }
+  }
+
+  // Sort by x for binary search
+  samples.sort((a, b) => a.x - b.x);
+
+  return (targetX: number): number => {
+    if (samples.length < 2) return NaN;
+
+    const firstSample = samples[0]!;
+    const lastSample = samples[samples.length - 1]!;
+
+    if (targetX <= firstSample.x) return firstSample.y;
+    if (targetX >= lastSample.x) return lastSample.y;
+
+    // Binary search for interval
+    let lo = 0;
+    let hi = samples.length - 1;
+
+    while (hi - lo > 1) {
+      const mid = Math.floor((lo + hi) / 2);
+      const midSample = samples[mid]!;
+      if (midSample.x <= targetX) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+
+    const loSample = samples[lo]!;
+    const hiSample = samples[hi]!;
+    const t = (targetX - loSample.x) / (hiSample.x - loSample.x || 1);
+    return loSample.y + t * (hiSample.y - loSample.y);
+  };
+}
+
+// ===== Intersection finding =====
+
+/**
+ * Find approximate intersection x-values of two y=f(x) style functions
+ * within [a, b] by scanning and bisection.
+ */
+export function findIntersectionsXRange(
+  f1: (x: number) => number,
+  f2: (x: number) => number,
+  a: number,
+  b: number,
+  scanSteps: number = 500,
+): number[] {
+  const intersections: number[] = [];
+  const dx = (b - a) / scanSteps;
+
+  let prevDiff = f1(a) - f2(a);
+
+  for (let i = 1; i <= scanSteps; i++) {
+    const x = a + i * dx;
+    const diff = f1(x) - f2(x);
+
+    if (prevDiff * diff < 0) {
+      // Sign change detected — bisect
+      let lo = x - dx;
+      let hi = x;
+      for (let j = 0; j < 50; j++) {
+        const mid = (lo + hi) / 2;
+        const midDiff = f1(mid) - f2(mid);
+        if (Math.abs(midDiff) < 1e-12) {
+          lo = mid;
+          break;
+        }
+        if (midDiff * (f1(lo) - f2(lo)) < 0) {
+          hi = mid;
+        } else {
+          lo = mid;
+        }
+      }
+      intersections.push((lo + hi) / 2);
+    } else if (Math.abs(diff) < 1e-10) {
+      intersections.push(x);
+    }
+
+    prevDiff = diff;
+  }
+
+  return intersections;
+}
+
+// ===== Curve sampling (for 2D canvas drawing) =====
+
+/**
+ * Evaluate a single curve expression over the given x range.
+ * Returns an array of { x, y } points (NaN values are filtered out).
+ * Handles domain-boundary detection via bisection so curves like
+ * y = sqrt(x-1) start precisely at (1, 0).
+ */
+export function sampleCurve(
+  curve: CurveDefinition,
+  xMin: number,
+  xMax: number,
+  steps: number = 300,
+): ProfilePoint[] {
+  // If type is not set but equation is, try to parse it
+  let effectiveCurve = curve;
+  if ((!curve.type || !curve.expression) && curve.equation) {
+    const parsed = parseEquation(curve.equation);
+    if (parsed) {
+      effectiveCurve = {
+        ...curve,
+        type: parsed.type,
+        expression: parsed.expression,
+      };
+    }
+  }
+
+  const cc = compileCurve(effectiveCurve);
+  const dx = (xMax - xMin) / steps;
+  const pts: ProfilePoint[] = [];
+
+  if (effectiveCurve.type === "x_const") {
+    const xVal = cc.constVal ?? 0;
+    pts.push({ x: xVal, y: -1000 });
+    pts.push({ x: xVal, y: 1000 });
+    return pts;
+  }
+
+  if (effectiveCurve.type === "y_const") {
+    const yVal = cc.constVal ?? 0;
+    pts.push({ x: xMin, y: yVal });
+    pts.push({ x: xMax, y: yVal });
+    return pts;
+  }
+
+  if (effectiveCurve.type === "x_of_y") {
+    const yMin = -10;
+    const yMax = 10;
+    const dyStep = (yMax - yMin) / steps;
+    for (let i = 0; i <= steps; i++) {
+      const y = yMin + i * dyStep;
+      const x = evalCurve(cc, y);
+      if (isFinite(x)) {
+        pts.push({ x, y });
+      }
+    }
+    return pts;
+  }
+
+  // y_of_x — with domain-boundary detection.
+  // When fn transitions NaN→finite, bisect to find the exact domain edge
+  // so curves like y=sqrt(x-1) start precisely at (1, 0).
+  const bisectDomainEdge = (
+    xNaN: number,
+    xFin: number,
+  ): { x: number; y: number } | null => {
+    let nanSide = xNaN;
+    let finSide = xFin;
+    let bestX = xFin;
+    let bestY = evalCurve(cc, xFin);
+    if (!isFinite(bestY)) return null;
+    for (let iter = 0; iter < 60; iter++) {
+      const mid = (nanSide + finSide) / 2;
+      const yMid = evalCurve(cc, mid);
+      if (isFinite(yMid)) {
+        finSide = mid;
+        bestX = mid;
+        bestY = yMid;
+      } else nanSide = mid;
+      if (Math.abs(finSide - nanSide) < 1e-12) break;
+    }
+    return { x: bestX, y: bestY };
+  };
+
+  const rawYs: (number | null)[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const x = xMin + i * dx;
+    const y = evalCurve(cc, x);
+    rawYs.push(isFinite(y) ? y : null);
+  }
+
+  let prevNull = rawYs[0] === null;
+  for (let i = 0; i <= steps; i++) {
+    const x = xMin + i * dx;
+    const yRaw = rawYs[i];
+    const currNull = yRaw === null;
+
+    if (!currNull && prevNull && i > 0) {
+      const edge = bisectDomainEdge(xMin + (i - 1) * dx, x);
+      if (edge) pts.push(edge);
+    } else if (currNull && !prevNull && i > 0) {
+      const edge = bisectDomainEdge(x, xMin + (i - 1) * dx);
+      if (edge) pts.push(edge);
+    }
+    if (!currNull) pts.push({ x, y: yRaw! });
+    prevNull = currNull;
+  }
+
+  return pts;
+}
