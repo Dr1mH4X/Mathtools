@@ -190,7 +190,7 @@
     /* --- Buttons --- */
     .btn {
         @apply inline-flex items-center justify-center gap-2
-               rounded-sm border border-border bg-bg-soft
+               rounded-md border border-border bg-bg-soft
                px-5 py-2.5 text-[0.9rem] font-medium leading-[1.4]
                text-text whitespace-nowrap select-none
                transition-all duration-200 ease-in-out cursor-pointer;
@@ -234,7 +234,7 @@
     input[type="text"],
     input[type="number"],
     select {
-        @apply w-full rounded-sm border border-border
+        @apply w-full rounded-md border border-border
                bg-bg-input px-3.5 py-2.5 text-[0.9rem] leading-[1.4]
                text-text outline-none transition-all duration-200 ease-in-out;
         font-family: var(--font-sans);
@@ -252,7 +252,7 @@
     }
 
     select {
-        @apply cursor-pointer pr-8;
+        @apply cursor-pointer pr-8 rounded-md;
         appearance: none;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239096a6' d='M2.5 4.5L6 8l3.5-3.5'/%3E%3C/svg%3E");
         background-repeat: no-repeat;
@@ -341,14 +341,14 @@
         -webkit-appearance: none;
         appearance: none;
         @apply w-9 h-9 p-0.5 cursor-pointer bg-transparent
-               rounded-sm;
+               rounded-md;
         border: 2px solid var(--c-border);
     }
     input[type="color"]::-webkit-color-swatch-wrapper {
         padding: 0;
     }
     input[type="color"]::-webkit-color-swatch {
-        @apply border-none rounded-xs;
+        @apply border-none rounded-md;
     }
 
     /* --- Tooltip --- */
@@ -463,7 +463,7 @@
 /* --- AppHeader: Nav links --- */
 .nav-link {
     @apply px-3.5 py-1.5 text-[0.85rem] font-medium text-text-soft
-           rounded-sm no-underline transition-all duration-200 ease-in-out;
+           rounded-md no-underline transition-all duration-200 ease-in-out;
 }
 .nav-link:hover {
     @apply text-text bg-bg-hover;
@@ -475,7 +475,7 @@
 /* --- AppHeader: icon buttons --- */
 .header-btn {
     @apply inline-flex items-center justify-center w-9 h-9
-           border border-border rounded-sm bg-bg-soft text-text-soft
+           border border-border rounded-md bg-bg-soft text-text-soft
            cursor-pointer p-0 transition-all duration-200 ease-in-out;
 }
 .header-btn:hover {
@@ -485,11 +485,11 @@
 /* --- AppHeader: Hamburger --- */
 .hamburger {
     @apply flex flex-col justify-center items-center gap-[5px]
-           w-9 h-9 border border-border rounded-sm bg-bg-soft
+           w-9 h-9 border border-border rounded-md bg-bg-soft
            cursor-pointer p-0 transition-all duration-200 ease-in-out;
 }
 .hamburger span {
-    @apply block w-[18px] h-0.5 bg-text-soft rounded-xs;
+    @apply block w-[18px] h-0.5 bg-text-soft rounded-md;
     transition: all 0.25s ease;
 }
 .hamburger.active span:nth-child(1) {
@@ -505,7 +505,7 @@
 /* --- AppHeader: Mobile nav links --- */
 .mobile-nav-link {
     @apply px-4 py-3 text-[0.9rem] font-medium text-text-soft
-           rounded-sm cursor-pointer no-underline
+           rounded-md cursor-pointer no-underline
            transition-all duration-200 ease-in-out;
 }
 .mobile-nav-link:hover,
@@ -598,7 +598,7 @@
 .axis-btn {
     @apply flex-1 flex items-center justify-center gap-1.5
            px-3 py-2.5 text-[0.82rem] font-medium
-           border-2 border-border rounded-sm bg-bg-input
+           border-2 border-border rounded-md bg-bg-input
            text-text-soft cursor-pointer
            transition-all duration-200 ease-in-out;
     font-family: var(--font-sans);
@@ -613,7 +613,7 @@
 /* --- RevolutionVolume: Mode toggle buttons --- */
 .mode-btn {
     @apply flex-1 px-2 py-1.5 text-[0.78rem] font-medium text-center
-           border border-border rounded-sm bg-bg-input text-text-soft
+           border border-border rounded-md bg-bg-input text-text-soft
            cursor-pointer transition-all duration-200 ease-in-out;
     font-family: var(--font-sans);
 }
@@ -626,7 +626,7 @@
 
 /* --- RevolutionVolume: Preset buttons --- */
 .preset-btn {
-    @apply text-left px-3.5 py-2.5 border border-border rounded-sm
+    @apply text-left px-3.5 py-2.5 border border-border rounded-md
            bg-bg-input cursor-pointer transition-all duration-200 ease-in-out;
     font-family: var(--font-sans);
     contain: content;
@@ -640,7 +640,7 @@
 .view-tab {
     @apply flex items-center gap-1.5 px-4 py-[7px]
            text-[0.82rem] font-medium border border-transparent
-           rounded-sm bg-transparent text-text-soft cursor-pointer
+           rounded-md bg-transparent text-text-soft cursor-pointer
            transition-all duration-200 ease-in-out;
     font-family: var(--font-sans);
 }
@@ -653,7 +653,7 @@
 
 /* --- RevolutionVolume: LaTeX preview --- */
 .latex-preview {
-    @apply px-2 py-1 bg-bg-hover rounded-sm text-[0.85rem] leading-relaxed overflow-x-auto;
+    @apply px-2 py-1 bg-bg-hover rounded-md text-[0.85rem] leading-relaxed overflow-x-auto;
 }
 .latex-preview .katex-mathml {
     @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
@@ -705,7 +705,7 @@
 /* --- Canvas2D: Control buttons --- */
 .canvas-ctrl-btn {
     @apply w-[30px] h-[30px] p-0 flex items-center justify-center
-         bg-bg-soft border border-border rounded-sm
+         bg-bg-soft border border-border rounded-md
          opacity-75 cursor-pointer transition-opacity duration-150 ease-in-out;
 }
 .canvas-ctrl-btn:hover {
