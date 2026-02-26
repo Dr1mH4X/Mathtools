@@ -1,0 +1,239 @@
+import type {
+  ComputedRegion,
+  RotationAxis,
+  MeshProfilePoint,
+} from "./types";
+
+// ===================================================================
+// Mesh Engine
+//
+// Handles 3D mesh generation for the revolution solid:
+//   1. generateMeshProfiles       — 2D region → radial/axial profile points
+//   2. generateRevolutionGeometry — profile → swept triangle mesh
+//   3. computeNormals             — smooth vertex normals from triangle mesh
+// ===================================================================
+
+/**
+ * Generate profile points for 3D mesh construction.
+ *
+ * For rotation around x-axis:
+ *   - axisPos = x
+ *   - radius = |y - axisValue|
+ *
+ * For rotation around y-axis:
+ *   - axisPos = y
+ *   - radius = |x - axisValue|
+ *
+ * Returns an array of outer and inner profiles for washer/shell construction.
+ */
+export function generateMeshProfiles(
+  region: ComputedRegion,
+  axis: RotationAxis,
+  axisValue: number = 0,
+): { outer: MeshProfilePoint[]; inner: MeshProfilePoint[] } {
+  const { upperProfile, lowerProfile } = region;
+  const outer: MeshProfilePoint[] = [];
+  const inner: MeshProfilePoint[] = [];
+
+  if (axis === "x") {
+    // Rotating around y = axisValue
+    for (let i = 0; i < upperProfile.length; i++) {
+      const up = upperProfile[i]!;
+      const lo = lowerProfile[i];
+      const x = up.x;
+      const yUp = up.y;
+      const yLo = lo?.y ?? 0;
+
+      const d1 = Math.abs(yUp - axisValue);
+      const d2 = Math.abs(yLo - axisValue);
+
+      const axisInside =
+        axisValue >= Math.min(yUp, yLo) && axisValue <= Math.max(yUp, yLo);
+
+      outer.push({ axisPos: x, radius: Math.max(d1, d2) });
+      inner.push({ axisPos: x, radius: axisInside ? 0 : Math.min(d1, d2) });
+    }
+  } else {
+    // Rotating around x = axisValue (shell method)
+    for (let i = 0; i < upperProfile.length; i++) {
+      const up = upperProfile[i]!;
+      const lo = lowerProfile[i];
+      const x = up.x;
+      const yUp = up.y;
+      const yLo = lo?.y ?? 0;
+      const rOuter = Math.abs(x - axisValue);
+
+      outer.push({ axisPos: yUp, radius: rOuter });
+      inner.push({ axisPos: yLo, radius: rOuter });
+    }
+  }
+
+  return { outer, inner };
+}
+
+/**
+ * Generate vertices for a surface of revolution.
+ * Takes a 2D profile (series of (radius, axisPos) points) and sweeps it
+ * around the axis by `segments` angular steps.
+ *
+ * Returns flat arrays suitable for Three.js BufferGeometry:
+ *   positions: Float32Array (3 * vertexCount)
+ *   indices: Uint32Array (3 * triangleCount)
+ *   normals: Float32Array (3 * vertexCount)
+ */
+export function generateRevolutionGeometry(
+  region: ComputedRegion,
+  axis: RotationAxis,
+  axisValue: number = 0,
+  angularSegments: number = 64,
+  angleExtent: number = Math.PI * 2,
+): {
+  positions: Float32Array;
+  indices: Uint32Array;
+  normals: Float32Array;
+} {
+  const { outer, inner } = generateMeshProfiles(region, axis, axisValue);
+
+  // Build a closed cross-section profile:
+  // outer profile forward, then inner profile backward to close the loop
+  const profile: MeshProfilePoint[] = [];
+
+  // Outer from start to end
+  for (const p of outer) {
+    profile.push(p);
+  }
+
+  // Cap at the end: connect outer end to inner end
+  if (inner.length > 0) {
+    // Inner from end to start (reversed)
+    for (let i = inner.length - 1; i >= 0; i--) {
+      profile.push(inner[i]!);
+    }
+  }
+
+  const profileLen = profile.length;
+  const angSegs = angularSegments;
+  const vertCount = profileLen * (angSegs + 1);
+  const triCount = profileLen * angSegs * 2;
+
+  const positions = new Float32Array(vertCount * 3);
+  const normals = new Float32Array(vertCount * 3);
+  const indices = new Uint32Array(triCount * 3);
+
+  // Generate vertices by sweeping profile
+  for (let j = 0; j <= angSegs; j++) {
+    const angle = (j / angSegs) * angleExtent;
+    const cosA = Math.cos(angle);
+    const sinA = Math.sin(angle);
+
+    for (let i = 0; i < profileLen; i++) {
+      const idx = j * profileLen + i;
+      const pt = profile[i]!;
+      const r = pt.radius;
+      const h = pt.axisPos;
+
+      let px: number, py: number, pz: number;
+
+      if (axis === "x") {
+        // Rotation axis is along X (horizontal)
+        px = h;
+        py = axisValue + r * cosA;
+        pz = r * sinA;
+      } else {
+        // Rotation axis is along Y (vertical)
+        px = axisValue + r * cosA;
+        py = h;
+        pz = r * sinA;
+      }
+
+      positions[idx * 3] = px;
+      positions[idx * 3 + 1] = py;
+      positions[idx * 3 + 2] = pz;
+    }
+  }
+
+  // Generate indices
+  let triIdx = 0;
+  for (let j = 0; j < angSegs; j++) {
+    for (let i = 0; i < profileLen; i++) {
+      const nextI = (i + 1) % profileLen;
+      const a = j * profileLen + i;
+      const b = j * profileLen + nextI;
+      const c = (j + 1) * profileLen + nextI;
+      const d = (j + 1) * profileLen + i;
+
+      indices[triIdx++] = a;
+      indices[triIdx++] = b;
+      indices[triIdx++] = c;
+
+      indices[triIdx++] = a;
+      indices[triIdx++] = c;
+      indices[triIdx++] = d;
+    }
+  }
+
+  // Compute normals
+  computeNormals(positions, indices, normals);
+
+  return { positions, indices, normals };
+}
+
+/**
+ * Compute smooth vertex normals for a triangle mesh by accumulating
+ * face normals and normalizing per vertex.
+ */
+function computeNormals(
+  positions: Float32Array,
+  indices: Uint32Array,
+  normals: Float32Array,
+): void {
+  // Zero out normals
+  normals.fill(0);
+
+  // Accumulate face normals
+  for (let i = 0; i < indices.length; i += 3) {
+    const ia = indices[i]!;
+    const ib = indices[i + 1]!;
+    const ic = indices[i + 2]!;
+
+    const ax = positions[ia * 3]!,
+      ay = positions[ia * 3 + 1]!,
+      az = positions[ia * 3 + 2]!;
+    const bx = positions[ib * 3]!,
+      by = positions[ib * 3 + 1]!,
+      bz = positions[ib * 3 + 2]!;
+    const cx = positions[ic * 3]!,
+      cy = positions[ic * 3 + 1]!,
+      cz = positions[ic * 3 + 2]!;
+
+    const e1x = bx - ax,
+      e1y = by - ay,
+      e1z = bz - az;
+    const e2x = cx - ax,
+      e2y = cy - ay,
+      e2z = cz - az;
+
+    const nx = e1y * e2z - e1z * e2y;
+    const ny = e1z * e2x - e1x * e2z;
+    const nz = e1x * e2y - e1y * e2x;
+
+    for (const idx of [ia, ib, ic]) {
+      normals[idx * 3] = (normals[idx * 3] ?? 0) + nx;
+      normals[idx * 3 + 1] = (normals[idx * 3 + 1] ?? 0) + ny;
+      normals[idx * 3 + 2] = (normals[idx * 3 + 2] ?? 0) + nz;
+    }
+  }
+
+  // Normalize
+  for (let i = 0; i < normals.length; i += 3) {
+    const nx = normals[i]!;
+    const ny = normals[i + 1]!;
+    const nz = normals[i + 2]!;
+    const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    if (len > 1e-8) {
+      normals[i] = nx / len;
+      normals[i + 1] = ny / len;
+      normals[i + 2] = nz / len;
+    }
+  }
+}

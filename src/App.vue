@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import AppHeader from "@/components/layout/AppHeader.vue";
+import { useSEO } from "@/composables/useSEO";
+
+useSEO();
 </script>
 
 <template>

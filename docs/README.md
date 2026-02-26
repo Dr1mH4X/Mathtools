@@ -28,6 +28,7 @@
   - [体积计算](#体积计算)
   - [3D 渲染管线](#3d-渲染管线)
   - [2D 画布视图](#2d-画布视图)
+- [SEO 与 Meta 标签管理](#seo-与-meta-标签管理)
 - [构建与运行](#构建与运行)
 - [关键依赖说明](#关键依赖说明)
 
@@ -96,9 +97,17 @@ src/
 │
 ├── composables/
 │   └── useThreeScene.ts    # Three.js 场景管理 (组合式函数)
+│   └── useSEO.ts           # SEO 与 Meta 标签管理
 │
 ├── utils/
-│   └── mathEngine.ts       # ★ 数学核心：解析/积分/网格生成/预设
+│   ├── mathEngine.ts       # ★ Barrel 重导出（保持向后兼容的统一入口）
+│   ├── types.ts            # 共享类型/接口定义
+│   ├── latex.ts            # LaTeX 规范化、方程→LaTeX、体积格式化
+│   ├── curveEngine.ts      # 曲线解析、编译、求值、采样
+│   ├── regionEngine.ts     # 2D 有界区域计算
+│   ├── volumeEngine.ts     # 数值积分与体积计算
+│   ├── meshEngine.ts       # 3D 旋转体网格生成
+│   └── presets.ts          # 预设示例数据
 │
 ├── i18n/
 │   ├── index.ts            # i18n 实例：语言检测、locale 切换
@@ -154,45 +163,120 @@ src/
 | `resetCamera()`    | 重置相机到包围球最佳视角                                              |
 | `dispose()`        | 释放所有 GPU 资源、移除事件监听                                       |
 
-### utils — 工具库
+### utils — 工具库（模块化架构）
 
-| 文件              | 说明                                                                                  |
-| ----------------- | ------------------------------------------------------------------------------------- |
-| `mathEngine.ts`   | **数学计算核心**。包含曲线解析、区域计算、数值积分、3D 网格生成、预设示例等 |
+原先所有数学逻辑集中在单一的 `mathEngine.ts` (1400+ 行)，现已按职责拆分为 8 个独立子模块。
+`mathEngine.ts` 保留为 **barrel 重导出文件**，所有已有的 `import { ... } from "@/utils/mathEngine"` 无需任何修改即可正常工作。
 
-**`mathEngine.ts` 主要导出：**
+```
+utils/
+├── mathEngine.ts      ← barrel 重导出（向后兼容入口）
+├── types.ts           ← 共享类型定义
+├── curveDefaults.ts   ← 集中管理的数值常量与诊断工具
+├── latex.ts           ← LaTeX 相关
+├── curveEngine.ts     ← 曲线层
+├── regionEngine.ts    ← 区域层
+├── volumeEngine.ts    ← 体积层
+├── meshEngine.ts      ← 3D 网格层
+└── presets.ts         ← 预设数据
+```
 
-| 符号                           | 类型     | 说明                                                                 |
-| ------------------------------ | -------- | -------------------------------------------------------------------- |
-| `CurveType`                    | type     | `"y_of_x" \| "x_of_y" \| "x_const" \| "y_const"`                   |
-| `CurveDefinition`              | interface| 曲线定义：`{ id, type, expression, equation, color? }`              |
-| `RotationAxis`                 | type     | `"x" \| "y"`                                                        |
-| `ComputedRegion`               | interface| 计算后的区域：`{ upperProfile, lowerProfile, xMin, xMax }`          |
-| `RevolutionResult`             | interface| 计算结果：`{ volume, formulaLatex, region, methodKey }`             |
-| `parseEquation(raw)`           | function | 将 `"y = sqrt(x-1)"` 解析为 `{ type, expression }`                 |
-| `computeRegion(curves, ...)`   | function | 从曲线集合计算上/下边界轮廓。3+ 曲线时自动用交点收紧范围             |
-| `computeVolume(region, axis)`  | function | 数值积分求旋转体体积 (Simpson 法)。绕 x 轴用圆盘法，绕 y 轴用柱壳法 |
-| `autoDetectBounds(curves)`     | function | 扫描曲线交点，自动估算合理的 x 范围                                  |
-| `generateMeshProfiles(...)`    | function | 从 2D 区域生成 3D 网格的径向/轴向轮廓点                              |
-| `generateRevolutionGeometry()` | function | 将轮廓点扫描旋转生成三角网格 (positions, normals, indices)            |
-| `sampleCurve(curve, ...)`      | function | 对单条曲线采样，返回 `{ x, y }[]`，供 Canvas2D 绘图使用              |
-| `formatVolume(volume)`         | function | 将数值体积格式化为 π 的倍数/分数 (如 `4π/3`)                         |
-| `presetExamples`               | const    | 预设示例数组 (抛物线与直线、正弦曲线、两曲线之间)                     |
+#### `types.ts` — 共享类型/接口
 
-**内部关键函数 (非导出)：**
+| 符号                | 类别      | 说明                                                              |
+| ------------------- | --------- | ----------------------------------------------------------------- |
+| `CurveType`         | type      | `"y_of_x" \| "x_of_y" \| "x_const" \| "y_const"`                |
+| `CurveDefinition`   | interface | 曲线定义：`{ id, type, expression, equation, color? }`           |
+| `RotationAxis`      | type      | `"x" \| "y"`                                                     |
+| `RevolutionConfig`  | interface | 完整旋转体配置（曲线集、范围、轴、分辨率）                        |
+| `ProfilePoint`      | interface | 采样点 `{ x, y }`                                                |
+| `ComputedRegion`    | interface | 计算后的区域：`{ upperProfile, lowerProfile, xMin, xMax }`       |
+| `RevolutionResult`  | interface | 计算结果：`{ volume, formulaLatex, region, methodKey }`          |
+| `MeshProfilePoint`  | interface | 3D 网格轮廓点 `{ radius, axisPos }`                              |
+| `PresetExample`     | interface | 预设示例定义                                                      |
+| `CompiledCurve`     | interface | 编译后的曲线内部表示                                              |
+
+#### `curveDefaults.ts` — 集中管理的数值常量与诊断工具
+
+所有控制 y 采样窗口、搜索范围和视觉范围的数值常量集中在此文件中，
+修改一处即可同步影响 `curveEngine.ts`、`regionEngine.ts`、`volumeEngine.ts` 等所有消费方。
+
+| 符号 / 函数                  | 类别     | 说明                                                                 |
+| ---------------------------- | -------- | -------------------------------------------------------------------- |
+| `INVERSE_Y_MIN`              | const    | 反函数采样 y 窗口下界（默认 -50）                                     |
+| `INVERSE_Y_MAX`              | const    | 反函数采样 y 窗口上界（默认 50）                                      |
+| `INVERSE_SAMPLE_COUNT`       | const    | 反函数采样点数（默认 1000）                                           |
+| `SAMPLE_CURVE_Y_MIN`         | const    | `sampleCurve` 中 x=g(y) 曲线绘图 y 范围下界（默认 -10）              |
+| `SAMPLE_CURVE_Y_MAX`         | const    | `sampleCurve` 中 x=g(y) 曲线绘图 y 范围上界（默认 10）               |
+| `VERTICAL_LINE_EXTENT`       | const    | 垂直线 (x=const) 的视觉 y 范围 ±值（默认 1000）                      |
+| `AUTO_DETECT_SEARCH_MIN`     | const    | `autoDetectBounds` 默认 x 搜索范围下界（默认 -20）                    |
+| `AUTO_DETECT_SEARCH_MAX`     | const    | `autoDetectBounds` 默认 x 搜索范围上界（默认 20）                     |
+| `CURVE_ENGINE_DEBUG`         | const    | 诊断开关，开发模式自动为 `true`，生产环境为 `false`                    |
+| `warnOnce(tag, key, message)` | function | 去重 + debug 门控的 `console.warn`，同一 `(tag, key)` 只输出一次      |
+| `resetWarnings()`            | function | 清空去重集合（切换预设/测试时使用）                                    |
+
+#### `latex.ts` — LaTeX 规范化与渲染
+
+此模块将 **计算路径** (normalizeExpression) 和 **显示路径** (equationToLatex) 的 LaTeX 职责集中管理起来。
+
+| 函数                        | 说明                                                                       |
+| --------------------------- | -------------------------------------------------------------------------- |
+| `normalizeExpression(expr)` | LaTeX → mathjs 可计算字符串（`\frac{a}{b}` → `((a)/(b))`）                |
+| `equationToLatex(raw)`      | 方程字符串 → KaTeX 可渲染 LaTeX（使用 `parenthesis: "auto"` 避免多余括号） |
+| `formatNum(n)`              | 数字 → 简洁 LaTeX（整数/π 倍数/小数）                                     |
+| `formatVolume(volume)`      | 体积值 → `{ display, latex }` 对（π 倍数/分数/小数）                      |
+| `buildDiskFormulaLatex()`   | 构建圆盘法积分公式 LaTeX                                                   |
+| `buildShellFormulaLatex()`  | 构建柱壳法积分公式 LaTeX                                                   |
+
+#### `curveEngine.ts` — 曲线解析、编译与采样
+
+| 函数                             | 说明                                                           |
+| -------------------------------- | -------------------------------------------------------------- |
+| `parseEquation(raw)`             | 将 `"y = sqrt(x-1)"` 解析为 `{ type, expression }`            |
+| `isConstantExpression(expr,var)` | 判断表达式是否为常量（不含自由变量）                            |
+| `compileCurve(curve)`            | 使用 mathjs 编译表达式为可求值对象                              |
+| `evalCurve(cc, paramValue)`      | 安全求值已编译曲线，处理 NaN/Infinity                           |
+| `createInverseFunction(cc, options?)` | 对 x=g(y) 类型曲线采样+二分，创建近似 y(x) 反函数（可配置 y 采样窗口，无采样时抛异常） |
+| `tryCreateInverseFunction(cc, options?, onError?)` | `createInverseFunction` 的安全包装：失败时返回始终输出 `NaN` 的回退函数而非抛异常 |
+| `findIntersectionsXRange(f1,f2)` | 扫描+二分法寻找两函数在指定区间内的交点 x 值                    |
+| `sampleCurve(curve, ...)`        | 对单条曲线采样，返回 `{ x, y }[]`，供 Canvas2D 绘图使用        |
+
+#### `regionEngine.ts` — 2D 有界区域计算
 
 | 函数                           | 说明                                                           |
 | ------------------------------ | -------------------------------------------------------------- |
-| `compileCurve()`               | 使用 mathjs 编译表达式为可求值对象                              |
-| `evalCurve()`                  | 安全求值已编译曲线，处理 NaN/Infinity                           |
-| `findIntersectionsXRange()`    | 扫描+二分法寻找两函数在指定区间内的交点 x 值                    |
-| `computeRegionTwoCurves()`     | 两条曲线的 max/min 生成上下轮廓                                 |
+| `computeRegion(curves, ...)`   | 从曲线集合计算上/下边界轮廓。3+ 曲线时自动用交点收紧范围       |
+| `computeRegionTwoCurves()`     | 两条曲线的 max/min 生成上下轮廓（含域边界探测）                 |
 | `computeRegionMultiCurves()`   | 多条曲线取全局 max/min 生成上下轮廓                             |
-| `createInverseFunction()`      | 对 x=g(y) 类型曲线采样+二分，创建近似 y(x) 反函数               |
-| `simpsonsRule()`               | Simpson 1/3 数值积分                                            |
-| `createInterpolator()`         | 从离散轮廓点创建线性插值函数                                    |
-| `computeNormals()`             | 为三角网格计算平滑法线                                          |
-| `isConstantExpression()`       | 判断表达式是否为常量 (不含自由变量)                              |
+
+#### `volumeEngine.ts` — 体积计算与数值积分
+
+| 函数                          | 说明                                                            |
+| ----------------------------- | --------------------------------------------------------------- |
+| `computeVolume(region, axis)` | 数值积分求旋转体体积 (Simpson 法)。绕 x 轴用圆盘法，绕 y 轴用柱壳法 |
+| `simpsonsRule(f, a, b, n)`    | Simpson 1/3 数值积分                                            |
+| `createInterpolator(points)`  | 从离散轮廓点创建线性插值函数                                    |
+| `autoDetectBounds(curves, searchRange?, inverseOptions?)` | 扫描曲线交点，自动估算合理的 x 范围（可传入反函数采样选项） |
+
+#### `meshEngine.ts` — 3D 旋转体网格生成
+
+| 函数                            | 说明                                                          |
+| ------------------------------- | ------------------------------------------------------------- |
+| `generateMeshProfiles(...)`     | 从 2D 区域生成 3D 网格的径向/轴向轮廓点                       |
+| `generateRevolutionGeometry()`  | 将轮廓点扫描旋转生成三角网格 (positions, normals, indices)     |
+| *(内部)* `computeNormals()`     | 为三角网格计算平滑法线                                         |
+
+#### `presets.ts` — 预设示例
+
+| 符号              | 说明                                                           |
+| ----------------- | -------------------------------------------------------------- |
+| `presetExamples`  | 预设示例数组 (抛物线与直线、正弦曲线、两曲线之间)               |
+
+#### `mathEngine.ts` — Barrel 重导出
+
+此文件不再包含任何业务逻辑，仅通过 `export { ... } from "./xxx"` 和 `export type { ... } from "./types"` 重导出上述所有子模块的公共 API，
+包括 `curveDefaults.ts` 中的集中常量和诊断工具。
+所有已有的 `import { ... } from "@/utils/mathEngine"` 保持完全兼容，无需修改任何消费侧代码。
 
 ### i18n — 国际化
 
@@ -364,30 +448,46 @@ Vue 单文件组件的 `<style scoped>` 块遵循以下模式：
 ### 数据流
 
 ```
-用户输入方程 (如 "y = sqrt(x-1)")
+用户输入方程 (如 "y = sqrt(x-1)" 或 "y = \frac{1}{2}")
        │
-       ▼
- parseEquation()  →  { type: "y_of_x", expression: "sqrt(x-1)" }
-       │
-       ▼
- autoDetectBounds()  →  自动计算 xMin/xMax (基于曲线交点)
-       │
-       ▼
- computeRegion()  →  ComputedRegion { upperProfile[], lowerProfile[], xMin, xMax }
-       │
-       ├──────────────────────────┐
-       ▼                          ▼
- computeVolume()            generateMeshProfiles()
-  → 数值积分(Simpson)          → 径向/轴向轮廓
-  → RevolutionResult             │
-  → formulaLatex (KaTeX)         ▼
-                          generateRevolutionGeometry()
-                            → positions/normals/indices
-                                  │
-                                  ▼
-                          useThreeScene.buildSolid()
-                            → THREE.Mesh (实体+线框)
-                            → 3D 渲染
+       ├─── 显示路径 ──────────────────────────── 计算路径 ───┐
+       │                                                       │
+       ▼                                                       ▼
+ equationToLatex()                                    normalizeExpression()
+ [latex.ts]                                           [latex.ts]
+  → normalizeExpression()                              → LaTeX → mathjs 语法
+  → mathjs parse().toTex()                              (如 \frac{1}{2} → ((1)/(2)))
+    parenthesis: "auto" ← 修复！                              │
+  → KaTeX 渲染                                                ▼
+                                                      parseEquation()
+                                                      [curveEngine.ts]
+                                                       → { type, expression }
+                                                              │
+                                                              ▼
+                                                      autoDetectBounds()
+                                                      [volumeEngine.ts]
+                                                       → 自动计算 xMin/xMax
+                                                              │
+                                                              ▼
+                                                      computeRegion()
+                                                      [regionEngine.ts]
+                                                       → ComputedRegion { upper/lower Profile[] }
+                                                              │
+                                                ┌─────────────┤
+                                                ▼             ▼
+                                          computeVolume()  generateMeshProfiles()
+                                          [volumeEngine]   [meshEngine.ts]
+                                           → Simpson 积分    → 径向/轴向轮廓
+                                           → RevolutionResult     │
+                                           → formulaLatex         ▼
+                                             [latex.ts]    generateRevolutionGeometry()
+                                                           [meshEngine.ts]
+                                                            → positions/normals/indices
+                                                                  │
+                                                                  ▼
+                                                          useThreeScene.buildSolid()
+                                                            → THREE.Mesh (实体+线框)
+                                                            → 3D 渲染
 ```
 
 ### 曲线输入与解析
@@ -398,12 +498,19 @@ Vue 单文件组件的 `<style scoped>` 块遵循以下模式：
 - `y = 1` → 解析为 `y_const` 类型 (isConstantExpression 检测无自由变量 x)
 - `x = 0` → 解析为 `x_const` 类型
 - `x = y^2` → 解析为 `x_of_y` 类型 (检测到自由变量 y)
+- `y = \frac{1}{2}` → LaTeX 语法也受支持，先由 `normalizeExpression()` 转为 mathjs 语法
 
-解析流程 (`parseEquation`):
-1. 正则匹配 `y = ...` 或 `x = ...`
-2. 提取右侧表达式
-3. 通过 `isConstantExpression()` 判断是常量还是函数
-4. 返回 `{ type, expression }`
+解析流程 (`parseEquation` — `curveEngine.ts`):
+1. 调用 `normalizeExpression()` (`latex.ts`) 将可能的 LaTeX 语法转为 mathjs 兼容格式
+2. 正则匹配 `y = ...` 或 `x = ...`
+3. 提取右侧表达式
+4. 通过 `isConstantExpression()` 判断是常量还是函数
+5. 返回 `{ type, expression }`
+
+显示路径 (`equationToLatex` — `latex.ts`):
+1. 同样调用 `normalizeExpression()` 将输入转为 mathjs 兼容格式
+2. 使用 mathjs `parse().toTex({ parenthesis: "auto" })` 重建干净的 LaTeX
+3. 返回完整的 LaTeX 字符串供 KaTeX 渲染
 
 表达式由 mathjs 编译与求值，支持 `sqrt`, `sin`, `cos`, `tan`, `exp`, `log`, `pi`, `e`, `abs`, `^` 等。
 
@@ -446,6 +553,19 @@ Vue 单文件组件的 `<style scoped>` 块遵循以下模式：
 - 区域填充：上下轮廓围成区域，半透明填充 + 斜线阴影
 - 旋转轴指示：红色虚线 + 旋转箭头图标
 - 交互：鼠标左键拖拽平移、触摸支持 (单指平移、双指缩放)
+
+---
+
+## SEO 与 Meta 标签管理
+
+项目内置了动态的中英文 SEO 支持，主要通过 `src/composables/useSEO.ts` 组合式函数实现：
+
+- **动态标题与描述**：根据当前路由（`vue-router`）和当前语言（`vue-i18n`）自动更新 `document.title` 和 `<meta name="description">`。
+- **双语关键词**：根据当前语言环境动态注入对应的 `<meta name="keywords">`。
+- **社交媒体卡片**：自动生成 Open Graph (`og:title`, `og:description`, `og:type`, `og:url`) 和 Twitter Card (`twitter:card`, `twitter:title`, `twitter:description`) 标签，优化社交平台分享效果。
+- **HTML 语言属性**：动态更新 `<html lang="...">` 属性，帮助搜索引擎识别页面语言。
+
+在 `src/App.vue` 中全局调用了 `useSEO()`，确保在整个单页应用（SPA）的生命周期中，SEO 标签能够随路由和语言切换实时更新。同时，`index.html` 中也保留了基础的静态 Meta 标签，以保证在 JavaScript 加载前的基础抓取效果。
 
 ---
 
