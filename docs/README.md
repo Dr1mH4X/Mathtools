@@ -197,7 +197,7 @@ utils/
 
 #### `latex.ts` — LaTeX 规范化与渲染
 
-此模块将 **计算路径** (normalizeExpression) 和 **显示路径** (equationToLatex) 的 LaTeX 职责集中管理，
+此模块将 **计算路径** (normalizeExpression) 和 **显示路径** (equationToLatex) 的 LaTeX 职责集中管理起来。
 
 | 函数                        | 说明                                                                       |
 | --------------------------- | -------------------------------------------------------------------------- |
@@ -216,7 +216,7 @@ utils/
 | `isConstantExpression(expr,var)` | 判断表达式是否为常量（不含自由变量）                            |
 | `compileCurve(curve)`            | 使用 mathjs 编译表达式为可求值对象                              |
 | `evalCurve(cc, paramValue)`      | 安全求值已编译曲线，处理 NaN/Infinity                           |
-| `createInverseFunction(cc)`      | 对 x=g(y) 类型曲线采样+二分，创建近似 y(x) 反函数              |
+| `createInverseFunction(cc, options?)` | 对 x=g(y) 类型曲线采样+二分，创建近似 y(x) 反函数（可配置 y 采样窗口） |
 | `findIntersectionsXRange(f1,f2)` | 扫描+二分法寻找两函数在指定区间内的交点 x 值                    |
 | `sampleCurve(curve, ...)`        | 对单条曲线采样，返回 `{ x, y }[]`，供 Canvas2D 绘图使用        |
 
