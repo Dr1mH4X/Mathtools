@@ -156,7 +156,10 @@ export interface InverseFunctionOptions {
  * relevant y-range lies outside this window (e.g. `x = e^y` for large x)
  * will produce no usable samples.  Pass `options.yMin` / `options.yMax` to
  * widen or shift the window as needed.  If no finite samples are found in
- * the window the function throws instead of silently returning `NaN`.
+ * the window the function **throws** instead of silently returning `NaN`.
+ *
+ * For call sites that prefer graceful degradation over a thrown error,
+ * use {@link tryCreateInverseFunction} instead.
  */
 export function createInverseFunction(
   cc: CompiledCurve,
@@ -225,6 +228,35 @@ export function createInverseFunction(
     const t = (targetX - x0) / (x1 - x0);
     return y0 + t * (y1 - y0);
   };
+}
+
+/**
+ * Safe wrapper around {@link createInverseFunction}.
+ *
+ * If the inverse cannot be constructed (e.g. the curve's relevant y-domain
+ * lies entirely outside the sampling window), this function returns a
+ * fallback that always yields `NaN` instead of throwing.  An optional
+ * `onError` callback is invoked with the caught error so callers can log
+ * or surface the issue without aborting higher-level computations.
+ *
+ * This is the recommended entry point for best-effort helpers such as
+ * `computeRegion` and `autoDetectBounds`, where a single problematic
+ * curve should not crash the entire operation.
+ */
+export function tryCreateInverseFunction(
+  cc: CompiledCurve,
+  options?: InverseFunctionOptions,
+  onError?: (err: unknown) => void,
+): (x: number) => number {
+  try {
+    return createInverseFunction(cc, options);
+  } catch (err: unknown) {
+    if (onError) {
+      onError(err);
+    }
+    // Return a fallback inverse that signals "no data" for every input.
+    return (_x: number) => NaN;
+  }
 }
 
 // ===== Intersection finding =====

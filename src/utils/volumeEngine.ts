@@ -5,10 +5,11 @@ import type {
   RevolutionResult,
   ProfilePoint,
 } from "./types";
+import type { InverseFunctionOptions } from "./curveEngine";
 import {
   compileCurve,
   evalCurve,
-  createInverseFunction,
+  tryCreateInverseFunction,
   findIntersectionsXRange,
 } from "./curveEngine";
 import { buildDiskFormulaLatex, buildShellFormulaLatex } from "./latex";
@@ -225,6 +226,7 @@ export function createInterpolator(
 export function autoDetectBounds(
   curves: CurveDefinition[],
   searchRange: [number, number] = [-20, 20],
+  inverseOptions?: InverseFunctionOptions,
 ): { xMin: number; xMax: number } {
   const compiled = curves.map(compileCurve);
 
@@ -242,12 +244,20 @@ export function autoDetectBounds(
       c.def.type === "x_of_y",
   );
 
-  // Build y(x) evaluation functions
+  // Build y(x) evaluation functions.
+  // For x_of_y curves we use the safe wrapper so that a single curve whose
+  // y-domain lies outside the sampling window doesn't abort the entire
+  // auto-detection — it will simply be skipped (treated as NaN).
   const yFunctions: ((x: number) => number)[] = funcCurves.map((cc) => {
     if (cc.def.type === "y_of_x" || cc.def.type === "y_const") {
       return (x: number) => evalCurve(cc, x);
     } else if (cc.def.type === "x_of_y") {
-      return createInverseFunction(cc);
+      return tryCreateInverseFunction(cc, inverseOptions, (err) => {
+        console.warn(
+          `[autoDetectBounds] Could not build inverse for "${cc.def.expression}":`,
+          err instanceof Error ? err.message : err,
+        );
+      });
     }
     return (_x: number) => NaN;
   });

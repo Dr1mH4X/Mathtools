@@ -216,7 +216,8 @@ utils/
 | `isConstantExpression(expr,var)` | 判断表达式是否为常量（不含自由变量）                            |
 | `compileCurve(curve)`            | 使用 mathjs 编译表达式为可求值对象                              |
 | `evalCurve(cc, paramValue)`      | 安全求值已编译曲线，处理 NaN/Infinity                           |
-| `createInverseFunction(cc, options?)` | 对 x=g(y) 类型曲线采样+二分，创建近似 y(x) 反函数（可配置 y 采样窗口） |
+| `createInverseFunction(cc, options?)` | 对 x=g(y) 类型曲线采样+二分，创建近似 y(x) 反函数（可配置 y 采样窗口，无采样时抛异常） |
+| `tryCreateInverseFunction(cc, options?, onError?)` | `createInverseFunction` 的安全包装：失败时返回始终输出 `NaN` 的回退函数而非抛异常 |
 | `findIntersectionsXRange(f1,f2)` | 扫描+二分法寻找两函数在指定区间内的交点 x 值                    |
 | `sampleCurve(curve, ...)`        | 对单条曲线采样，返回 `{ x, y }[]`，供 Canvas2D 绘图使用        |
 
@@ -235,7 +236,7 @@ utils/
 | `computeVolume(region, axis)` | 数值积分求旋转体体积 (Simpson 法)。绕 x 轴用圆盘法，绕 y 轴用柱壳法 |
 | `simpsonsRule(f, a, b, n)`    | Simpson 1/3 数值积分                                            |
 | `createInterpolator(points)`  | 从离散轮廓点创建线性插值函数                                    |
-| `autoDetectBounds(curves)`    | 扫描曲线交点，自动估算合理的 x 范围                              |
+| `autoDetectBounds(curves, searchRange?, inverseOptions?)` | 扫描曲线交点，自动估算合理的 x 范围（可传入反函数采样选项） |
 
 #### `meshEngine.ts` — 3D 旋转体网格生成
 

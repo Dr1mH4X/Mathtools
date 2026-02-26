@@ -1,5 +1,10 @@
 import type { CurveDefinition, ComputedRegion, ProfilePoint } from "./types";
-import { compileCurve, evalCurve, createInverseFunction } from "./curveEngine";
+import type { InverseFunctionOptions } from "./curveEngine";
+import {
+  compileCurve,
+  evalCurve,
+  tryCreateInverseFunction,
+} from "./curveEngine";
 
 // ===================================================================
 // Region Engine
@@ -26,6 +31,7 @@ export function computeRegion(
   xMin: number,
   xMax: number,
   resolution: number = 200,
+  inverseOptions?: InverseFunctionOptions,
 ): ComputedRegion {
   if (curves.length < 2) {
     throw new Error("At least 2 curves are needed to define a region.");
@@ -58,12 +64,20 @@ export function computeRegion(
     );
   }
 
-  // Convert remaining curves to y(x) functions
+  // Convert remaining curves to y(x) functions.
+  // For x_of_y curves we use the safe wrapper so that a single curve whose
+  // y-domain lies outside the sampling window doesn't abort the entire
+  // region computation — it will simply be treated as unevaluable (NaN).
   const yFunctions: ((x: number) => number)[] = funcCurves.map((cc) => {
     if (cc.def.type === "y_of_x" || cc.def.type === "y_const") {
       return (x: number) => evalCurve(cc, x);
     } else if (cc.def.type === "x_of_y") {
-      return createInverseFunction(cc);
+      return tryCreateInverseFunction(cc, inverseOptions, (err) => {
+        console.warn(
+          `[computeRegion] Could not build inverse for "${cc.def.expression}":`,
+          err instanceof Error ? err.message : err,
+        );
+      });
     }
     return (_x: number) => NaN;
   });

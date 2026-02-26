@@ -46,6 +46,7 @@ export {
   compileCurve,
   evalCurve,
   createInverseFunction,
+  tryCreateInverseFunction,
   findIntersectionsXRange,
   sampleCurve,
 } from "./curveEngine";
