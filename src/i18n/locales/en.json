@@ -14,10 +14,38 @@
     "footer": "MathTools — Making Math Visual"
   },
   "home": {
-    "hero": "Explore Mathematics Visually",
+    "hero": {
+      "title": "Interactive Math Tools",
+      "subtitle": "Visualize, calculate, and explore mathematical concepts with our suite of powerful tools."
+    },
     "heroDesc": "A collection of interactive tools to help you understand and visualize mathematical concepts.",
-    "tools": "Tools",
-    "comingSoon": "Coming Soon"
+    "comingSoon": "This feature is currently under development and will be available in a future update.",
+    "tools": {
+      "revolution": {
+        "title": "Volume of Revolution",
+        "desc": "Define curves to form a 2D region, then rotate it around an axis to visualize the 3D solid and compute its volume."
+      },
+      "matrix": {
+        "title": "Matrix Calculator",
+        "desc": "Perform matrix operations including multiplication, inversion, determinants, and eigenvalue decomposition."
+      },
+      "graphing": {
+        "title": "Function Graphing",
+        "desc": "Plot and explore functions interactively with zooming, tracing, and multiple graph support."
+      },
+      "derivatives": {
+        "title": "Derivatives & Integrals",
+        "desc": "Compute symbolic derivatives and integrals with step-by-step solutions."
+      },
+      "geometry": {
+        "title": "Geometry Tools",
+        "desc": "Explore geometric shapes, transformations, and constructions interactively."
+      },
+      "statistics": {
+        "title": "Statistics",
+        "desc": "Analyze datasets with descriptive statistics, distributions, and visualizations."
+      }
+    }
   },
   "revolution": {
     "title": "Volume of Revolution",
@@ -115,6 +143,8 @@
     "close": "Close",
     "apply": "Apply",
     "cancel": "Cancel",
-    "language": "Language"
+    "language": "Language",
+    "comingSoon": "Coming Soon",
+    "tryNow": "Try Now"
   }
 }
