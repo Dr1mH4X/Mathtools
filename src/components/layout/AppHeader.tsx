@@ -120,7 +120,7 @@ export default function AppHeader() {
         {/* Right Actions */}
         <div className="flex items-center gap-2 ml-auto">
           <a
-            href="https://github.com/yourusername/mathtools"
+            href="https://github.com/Dr1mH4X/Mathtools"
             target="_blank"
             rel="noreferrer"
             className="header-btn p-2 rounded-md text-text-soft hover:text-text hover:bg-bg-soft transition-colors"
