@@ -1,10 +1,9 @@
 import { defineConfig } from "vite";
-import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
 
 export default defineConfig({
-  plugins: [vue(), tailwindcss()],
+  plugins: [tailwindcss()],
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),
@@ -22,7 +21,6 @@ export default defineConfig({
           three: ["three"],
           mathjs: ["mathjs"],
           katex: ["katex"],
-          vendor: ["vue", "vue-router", "vue-i18n"],
         },
       },
     },
