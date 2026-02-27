@@ -82,6 +82,15 @@ export function normalizeExpression(expr: string): string {
   // Remove any remaining stray backslashes before letters (e.g. \alpha unsupported)
   s = s.replace(/\\([a-zA-Z])/g, "$1");
 
+  // Remove stray backslashes that have no mathematical meaning and would
+  // cause mathjs parse errors.  Only target clearly invalid cases:
+  //   - Backslash followed by a non-letter (e.g. `\(`, `\1`, `\ `)
+  //   - Backslash at the very end of the string (the negative lookahead
+  //     succeeds at end-of-input because there is no letter ahead)
+  // This avoids blanket removal that could accidentally mangle
+  // valid-but-unsupported sequences.
+  s = s.replace(/\\(?![a-zA-Z])/g, "");
+
   // \ln → log  (mathjs uses log for natural logarithm)
   s = s.replace(/\bln\(/g, "log(");
 
