@@ -163,7 +163,7 @@ export default function MyComponent() {
 2. **`curveEngine.ts`**: 负责解析数学表达式，编译为可执行函数，并在 2D 空间进行离散采样。还提供 `findIntersectionsXRange()` 用于扫描并二分搜索两条曲线的交点 x 坐标。
 3. **`regionEngine.ts`**: 负责计算两条或多条曲线在指定区间 `[xMin, xMax]` 内的交点，并构建出封闭的 2D 区域 (Region)。支持 `y=f(x)`, `x=g(y)`, 以及常数线。
 4. **`volumeEngine.ts`**: 负责使用圆盘法/圆柱壳法进行数值积分（Simpson 法则），计算旋转体的精确体积，并生成体积公式的 LaTeX 表示。
-5. **`meshEngine.ts`**: 负责将 2D 区域绕指定轴（X轴或Y轴）旋转，生成 Three.js 的 `BufferGeometry` 3D 网格数据。使用 washer/shell 构造法生成内外轮廓，闭合剖面后进行角度扫描 (sweep) 得到三角网格。
+5. **`meshEngine.ts`**: 负责将 2D 区域绕指定轴（X轴或Y轴）旋转，生成 Three.js 的 `BufferGeometry` 3D 网格数据。使用 washer/shell 构造法生成内外轮廓，闭合剖面后进行角度扫描 (sweep) 得到三角网格。支持**逐顶点着色 (per-vertex coloring)**：每个轮廓点通过 `TaggedProfilePoint.origin` 标记来源曲线（`"upper"` / `"lower"`），`generateRevolutionGeometry()` 接收 `upperColor` / `lowerColor` 两个可选参数，生成额外的 `colors: Float32Array`（RGB per-vertex）供 Three.js `vertexColors` 消费。
 
 **Three.js 集成 (`useThreeScene.ts`)：**
 
@@ -183,14 +183,16 @@ Three.js 的场景、相机、渲染器被封装在 `useThreeScene` 工厂中。
 2. 使用 `computeRegion()` 计算 2D 有界区域
 3. 使用 `computeVolume()` 数值积分计算体积
 4. **自动切换到 3D 视图** (`setActiveView("3d")`)
-5. **从第一条曲线的颜色派生 3D 实体颜色**（`curveInputs[0].color`），写入 `display.color`
+5. **从前两条曲线的颜色构建 `curveColors: [string, string]`**，传入 `buildSolid()` 和 `generateRevolutionGeometry()` 以生成逐顶点颜色
 6. 调用 `buildSolid()` 生成 3D 网格并添加到场景（含 `requestAnimationFrame` 重试以确保场景就绪）
 7. 如果启用动画，触发 `startAnimation()`
 
-**3D 颜色同步：**
-- 侧边栏不再提供独立的颜色选择器，3D 实体颜色始终跟随第一条曲线的颜色
-- 当用户修改曲线颜色时，通过 `useEffect` 监听 `curveInputs` 变化，自动调用 `updateDisplay({ color })` 同步 3D 实体颜色
-- 这样方便用户通过曲线颜色控制透视效果
+**3D 逐曲线着色 (Per-Curve Coloring)：**
+- 3D 旋转体表面使用**逐顶点颜色 (vertex colors)**，由 2D 曲线的颜色决定：旋转后由某条曲线生成的那一面，着色为该曲线在 2D 中的颜色
+- `meshEngine.ts` 中的 `generateMeshProfiles()` 为每个轮廓点标记 `origin: "upper" | "lower"`，`generateRevolutionGeometry()` 据此生成 `colors` Float32Array
+- Three.js 材质设置 `vertexColors: true`，不再使用单一 `color` 属性
+- 截面高亮 (`buildCrossSection`) 中，上轮廓线和下轮廓线也分别使用各自曲线的颜色，填充区域使用两色混合
+- 当用户修改曲线颜色时，通过 `useEffect` 监听 `curveInputs` 变化，自动调用 `updateDisplay(display, curveColors)` 触发网格重建以同步顶点颜色
 
 ---
 
@@ -288,10 +290,11 @@ Three.js 的场景、相机、渲染器被封装在 `useThreeScene` 工厂中。
 - **模式** (Mode): `solid` / `wireframe` / `transparent` 三选一
 - **不透明度** (Opacity): 仅在 `transparent` 模式下显示滑块
 - **分辨率** (Resolution): 角度分段数，影响 3D 网格精度
-- **颜色**: 已从显示选项中移除独立的颜色选择器，3D 实体颜色自动跟随第一条曲线的颜色（在曲线定义区修改）
+- **颜色**: 已从显示选项中移除独立的颜色选择器，3D 实体颜色通过逐顶点着色自动跟随对应 2D 曲线的颜色（在曲线定义区修改），旋转体的每一面都着色为生成它的那条曲线的颜色
 - **复选框**: 坐标轴 / 网格 / 截面 / 动画
 
 ### 视口设计（2D / 3D 统一卡片）
+- **默认视图为 2D**（`activeView` 初始值 `"2d"`），用户可在侧边栏输入曲线后直接预览 2D 图形
 - 2D 和 3D 视图共享**同一个卡片容器**（`rounded-xl border shadow-sm`），位置和大小完全一致
 - 通过 `opacity` + `pointer-events` 切换可见性，无布局跳动
 - 卡片底部紧贴结果面板收起态的上方，通过动态 `paddingBottom` 实现
@@ -319,7 +322,9 @@ Three.js 的场景、相机、渲染器被封装在 `useThreeScene` 工厂中。
 - 2D Canvas 组件也在自身 JSX 上独立禁用右键（`onContextMenu`）
 
 ### 自动视图切换
+- 默认进入页面时显示 2D 视图
 - 点击 Generate 后自动切换到 3D 视图，无需手动操作
+- Reset 时自动切换回 2D 视图
 
 ---
 
