@@ -86,7 +86,7 @@ export default function RevolutionVolume() {
   const [region, setRegion] = useState<ComputedRegion | null>(null);
   const [result, setResult] = useState<RevolutionResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
-  const [activeView, setActiveView] = useState<"2d" | "3d">("3d");
+  const [activeView, setActiveView] = useState<"2d" | "3d">("2d");
   const [showHelp, setShowHelp] = useState(false);
   const [formulaCopied, setFormulaCopied] = useState(false);
   const [isGenerated, setIsGenerated] = useState(false);
@@ -148,7 +148,11 @@ export default function RevolutionVolume() {
   useEffect(() => {
     if (threeSceneRef.current && isGenerated) {
       const solidColor = curveInputs[0]?.color || defaultCurveColors[0];
-      threeSceneRef.current.updateDisplay({ color: solidColor });
+      const colors: [string, string] = [
+        curveInputs[0]?.color || defaultCurveColors[0],
+        curveInputs[1]?.color || defaultCurveColors[1],
+      ];
+      threeSceneRef.current.updateDisplay({ color: solidColor }, colors);
     }
   }, [curveInputs, isGenerated]);
 
@@ -272,6 +276,10 @@ export default function RevolutionVolume() {
       // Derive 3D solid color from the first curve's color
       const solidColor = curveInputs[0]?.color || defaultCurveColors[0];
       const displayWithCurveColor = { ...display, color: solidColor };
+      const colors: [string, string] = [
+        curveInputs[0]?.color || defaultCurveColors[0],
+        curveInputs[1]?.color || defaultCurveColors[1],
+      ];
 
       const buildIt = () => {
         if (threeSceneRef.current && threeSceneRef.current.getIsReady()) {
@@ -280,6 +288,8 @@ export default function RevolutionVolume() {
             axis,
             axisValue,
             displayWithCurveColor,
+            undefined,
+            colors,
           );
           if (display.animate) {
             requestAnimationFrame(() => {
@@ -327,6 +337,7 @@ export default function RevolutionVolume() {
     setResult(null);
     setIsGenerated(false);
     setErrorMsg("");
+    setActiveView("2d");
     if (threeSceneRef.current) {
       threeSceneRef.current.clearScene();
     }
