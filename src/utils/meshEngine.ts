@@ -16,9 +16,16 @@ import type { ComputedRegion, RotationAxis, MeshProfilePoint } from "./types";
 //   with `vertexColors: true`.
 // ===================================================================
 
-/** Extended profile point that remembers which boundary curve it came from. */
+/**
+ * Extended profile point that remembers which boundary curve it came from.
+ *
+ * `origin` is `null` for degenerate points whose radius has been forced to 0
+ * (e.g. when the rotation axis lies between the two curves).  These points
+ * don't contribute visible surface area, so their colour is irrelevant — the
+ * rendering code falls back to the outer curve's colour for them.
+ */
 interface TaggedProfilePoint extends MeshProfilePoint {
-  origin: "upper" | "lower";
+  origin: "upper" | "lower" | null;
 }
 
 /**
@@ -73,7 +80,12 @@ export function generateMeshProfiles(
       inner.push({
         axisPos: x,
         radius: axisInside ? 0 : Math.min(d1, d2),
-        origin: upperIsOuter ? "lower" : "upper",
+        // When the axis sits between the curves the inner radius is forced
+        // to 0 — the point is degenerate and produces no visible surface.
+        // We mark its origin as null so the colour lookup can fall back to
+        // the outer curve's colour instead of incorrectly painting a
+        // zero-radius seam with the opposite curve's colour.
+        origin: axisInside ? null : upperIsOuter ? "lower" : "upper",
       });
     }
   } else {
@@ -105,8 +117,33 @@ export function generateMeshProfiles(
 // Hex colour helpers
 // ---------------------------------------------------------------------------
 
+/** Default fallback colour — matches the primary blue #4f6ef7 */
+const FALLBACK_RGB: [number, number, number] = [0.31, 0.43, 0.97];
+
+/**
+ * Parse a CSS hex colour string (#RGB or #RRGGBB) into a linear-space
+ * `[r, g, b]` tuple with values in 0–1.
+ *
+ * Invalid / unsupported input is handled gracefully: the function logs a
+ * warning once and returns the default primary-blue fallback so the mesh
+ * is always renderable.
+ */
 function hexToRGB(hex: string): [number, number, number] {
+  if (typeof hex !== "string") {
+    console.warn(`[meshEngine] hexToRGB: expected string, got ${typeof hex}`);
+    return FALLBACK_RGB;
+  }
+
   const h = hex.replace(/^#/, "");
+
+  // Validate that the remaining characters are hex digits with valid length
+  if (!/^[0-9a-fA-F]{3}$/.test(h) && !/^[0-9a-fA-F]{6}$/.test(h)) {
+    console.warn(
+      `[meshEngine] hexToRGB: unsupported hex format "${hex}", using fallback`,
+    );
+    return FALLBACK_RGB;
+  }
+
   const n = parseInt(h, 16);
   if (h.length === 3) {
     const r = ((n >> 8) & 0xf) / 15;
@@ -122,15 +159,19 @@ function hexToRGB(hex: string): [number, number, number] {
  * Takes a 2D profile (series of (radius, axisPos) points) and sweeps it
  * around the axis by `segments` angular steps.
  *
- * When `upperColor` / `lowerColor` are provided the function also returns
- * a `colors` Float32Array (3 floats per vertex, linear‑space RGB) that can
- * be used as a vertex‑color attribute in Three.js.
+ * The returned `colors` Float32Array (3 floats per vertex, linear-space RGB)
+ * is **always** present.  When `upperColor` / `lowerColor` are supplied they
+ * are parsed via `hexToRGB`; when omitted (or invalid) the default primary
+ * blue (`#4f6ef7`) is used as a fallback for the corresponding curve.
+ * Profile points whose `origin` is `null` (degenerate zero-radius points
+ * created when the axis lies between the curves) inherit the outer curve's
+ * colour so that no visible seam is mis-coloured.
  *
  * Returns flat arrays suitable for Three.js BufferGeometry:
  *   positions: Float32Array (3 * vertexCount)
  *   indices:   Uint32Array  (3 * triangleCount)
  *   normals:   Float32Array (3 * vertexCount)
- *   colors:    Float32Array (3 * vertexCount)  — per-vertex RGB
+ *   colors:    Float32Array (3 * vertexCount)  — per-vertex RGB (always returned)
  */
 export function generateRevolutionGeometry(
   region: ComputedRegion,
@@ -176,14 +217,24 @@ export function generateRevolutionGeometry(
   const indices = new Uint32Array(triCount * 3);
 
   // Resolve per-profile-point RGB values
-  const fallback: [number, number, number] = [0.31, 0.43, 0.97]; // #4f6ef7
-  const upperRGB = upperColor ? hexToRGB(upperColor) : fallback;
-  const lowerRGB = lowerColor ? hexToRGB(lowerColor) : fallback;
+  const upperRGB = upperColor ? hexToRGB(upperColor) : FALLBACK_RGB;
+  const lowerRGB = lowerColor ? hexToRGB(lowerColor) : FALLBACK_RGB;
 
-  // Pre-compute per-profile-point colour so the inner loop stays tight
+  // Pre-compute per-profile-point colour so the inner loop stays tight.
+  // Points with origin === null (degenerate, zero-radius) inherit the
+  // outer curve's colour — they produce no visible surface, but having a
+  // sensible colour avoids any interpolation artefacts at the seam.
   const profileRGB: [number, number, number][] = new Array(profileLen);
   for (let i = 0; i < profileLen; i++) {
-    profileRGB[i] = profile[i]!.origin === "upper" ? upperRGB : lowerRGB;
+    const origin = profile[i]!.origin;
+    if (origin === "upper") {
+      profileRGB[i] = upperRGB;
+    } else if (origin === "lower") {
+      profileRGB[i] = lowerRGB;
+    } else {
+      // null origin — degenerate point; fall back to outer (upper) colour
+      profileRGB[i] = upperRGB;
+    }
   }
 
   // Generate vertices by sweeping profile
