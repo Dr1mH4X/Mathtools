@@ -453,9 +453,25 @@ export function sampleCurve(
   let cc: CompiledCurve;
   try {
     cc = compileCurve(effectiveCurve);
-  } catch {
-    // Expression is not (yet) valid — return empty so the canvas simply
-    // draws nothing for this curve instead of crashing React.
+  } catch (err: unknown) {
+    // compileCurve throws Error with messages starting with
+    // "Cannot parse constant:" or "Cannot parse expression" for
+    // user-input validation failures.  For those we silently return
+    // an empty sample set so the canvas draws nothing for this curve
+    // instead of crashing React mid-render.
+    if (
+      err instanceof Error &&
+      (err.message.startsWith("Cannot parse") ||
+        err.message.startsWith("Cannot parse constant"))
+    ) {
+      return [];
+    }
+    // Unexpected / programming error — log so it doesn't go unnoticed,
+    // but still return [] to keep the UI from white-screening.
+    console.error(
+      "[curveEngine] sampleCurve: unexpected error from compileCurve",
+      err,
+    );
     return [];
   }
   const dx = (xMax - xMin) / steps;
