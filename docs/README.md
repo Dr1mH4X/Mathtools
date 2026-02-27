@@ -355,7 +355,7 @@ Three.js 的场景、相机、渲染器被封装在 `useThreeScene` 工厂中。
 
 ## 构建与运行
 
-项目使用 Vite 作为构建工具，提供极速的冷启动和 HMR（热更新）。
+项目使用 Vite 作为构建工具
 
 ### 安装依赖
 ```bash
@@ -372,7 +372,7 @@ pnpm dev
 ```bash
 pnpm build
 ```
-执行 TypeScript 类型检查 (`tsc -b`) 并使用 Vite 进行生产环境打包。打包配置中已对 `three`, `mathjs`, `katex`, `react` 等大型依赖进行了分包 (Manual Chunks) 优化。
+执行 TypeScript 类型检查 (`tsc -b`) 并使用 Vite 进行生产环境打包。
 
 ### 预览生产构建
 ```bash
