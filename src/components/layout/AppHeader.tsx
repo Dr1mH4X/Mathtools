@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { NavLink, Link } from "react-router-dom";
 import { Menu, X, Moon, Sun, Globe, Github } from "lucide-react";
 import { useTranslation } from "@/i18n";
+import { useThemeStore } from "@/stores/useThemeStore";
 
 const navLinks = [
   { path: "/", labelKey: "app.nav.home", fallback: "Home" },
@@ -25,47 +26,10 @@ const navLinks = [
   },
 ];
 
-/**
- * Determine whether the system / user preference is dark.
- * Priority: saved preference > system media query.
- */
-function getInitialIsDark(): boolean {
-  const saved = localStorage.getItem("mathtools-theme");
-  if (saved === "dark") return true;
-  if (saved === "light") return false;
-  // Default: follow system
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
-
 export default function AppHeader() {
   const { t, locale, setLocale } = useTranslation();
+  const { isDark, toggleTheme } = useThemeStore();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isDark, setIsDark] = useState(getInitialIsDark);
-
-  // Apply theme to DOM and persist
-  useEffect(() => {
-    if (isDark) {
-      document.documentElement.setAttribute("data-theme", "dark");
-    } else {
-      document.documentElement.removeAttribute("data-theme");
-    }
-    localStorage.setItem("mathtools-theme", isDark ? "dark" : "light");
-  }, [isDark]);
-
-  // Listen to system preference changes (only when no manual override yet)
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = (e: MediaQueryListEvent) => {
-      const saved = localStorage.getItem("mathtools-theme");
-      if (!saved) {
-        setIsDark(e.matches);
-      }
-    };
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-
-  const toggleTheme = () => setIsDark((prev) => !prev);
 
   const toggleLocale = () => {
     setLocale(locale === "en" ? "zh" : "en");

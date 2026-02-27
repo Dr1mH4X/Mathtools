@@ -1,50 +1,35 @@
-import { useSyncExternalStore } from "react";
-import en from "./locales/en.json";
-import zh from "./locales/zh.json";
+// ===================================================================
+// i18n — Thin wrapper around i18next + react-i18next
+//
+// This module re-exports a `useTranslation` hook and utility helpers
+// that match the signatures previously consumed by every component in
+// the project, so **no existing import path needs to change**.
+//
+// Under the hood everything is now delegated to i18next.
+// ===================================================================
 
-export type MessageSchema = typeof en;
-export type Locale = "en" | "zh";
+import i18n from "./config";
+import { useTranslation as useReactI18next } from "react-i18next";
 
-const messages: Record<Locale, Record<string, unknown>> = { en, zh };
+export type { Locale } from "./config";
 
-let currentLocale: Locale = getDefaultLocale();
+// Re-export the configured i18n instance for advanced use
+export { default as i18n } from "./config";
 
-const listeners: Set<() => void> = new Set();
-
-function getDefaultLocale(): Locale {
-  const saved = localStorage.getItem("mathtools-locale");
-  if (saved === "en" || saved === "zh") {
-    return saved;
-  }
-  const browserLang = navigator.language.toLowerCase();
-  if (browserLang.startsWith("zh")) {
-    return "zh";
-  }
-  return "en";
-}
-
-export function setLocale(locale: Locale): void {
-  if (currentLocale === locale) return;
-  currentLocale = locale;
-  localStorage.setItem("mathtools-locale", locale);
-  document.documentElement.setAttribute("lang", locale);
-  listeners.forEach((fn) => fn());
-}
-
-export function getLocale(): Locale {
-  return currentLocale;
-}
-
-export function onLocaleChange(fn: () => void): () => void {
-  listeners.add(fn);
-  return () => {
-    listeners.delete(fn);
-  };
+/**
+ * Normalise whatever language string i18next holds (e.g. "en-US",
+ * "zh-CN", "zh-TW") into one of the two supported locale keys.
+ */
+function normalizeLocale(lng?: string): "en" | "zh" {
+  return lng?.startsWith("zh") ? "zh" : "en";
 }
 
 /**
- * Translate a dot-separated key, e.g. "revolution.title".
- * Supports simple {placeholder} interpolation via the optional `params` argument.
+ * Stand-alone translate function (works outside React).
+ *
+ * Overloads kept for backward compatibility:
+ *   t(key, params?)   — interpolate {placeholder} tokens
+ *   t(key, fallback)  — return fallback string when key is missing
  */
 export function t(
   key: string,
@@ -55,64 +40,67 @@ export function t(
   key: string,
   paramsOrFallback?: Record<string, string | number> | string,
 ): string {
-  const parts = key.split(".");
-  let node: unknown = messages[currentLocale];
-  for (const part of parts) {
-    if (
-      node &&
-      typeof node === "object" &&
-      part in (node as Record<string, unknown>)
-    ) {
-      node = (node as Record<string, unknown>)[part];
-    } else {
-      node = undefined;
-      break;
-    }
+  if (typeof paramsOrFallback === "string") {
+    // Fallback mode — use i18next defaultValue
+    return i18n.t(key, { defaultValue: paramsOrFallback });
   }
-
-  if (typeof node !== "string") {
-    // Try fallback locale
-    let fallbackNode: unknown = messages["en"];
-    for (const part of parts) {
-      if (
-        fallbackNode &&
-        typeof fallbackNode === "object" &&
-        part in (fallbackNode as Record<string, unknown>)
-      ) {
-        fallbackNode = (fallbackNode as Record<string, unknown>)[part];
-      } else {
-        fallbackNode = undefined;
-        break;
-      }
-    }
-    if (typeof fallbackNode === "string") {
-      node = fallbackNode;
-    } else if (typeof paramsOrFallback === "string") {
-      return paramsOrFallback;
-    } else {
-      return key;
-    }
-  }
-
-  let result = node as string;
-
-  // Simple {placeholder} interpolation
   if (paramsOrFallback && typeof paramsOrFallback === "object") {
-    for (const [k, v] of Object.entries(paramsOrFallback)) {
-      result = result.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
-    }
+    return i18n.t(key, paramsOrFallback);
   }
+  return i18n.t(key);
+}
 
-  return result;
+export function setLocale(locale: "en" | "zh"): void {
+  i18n.changeLanguage(locale);
+}
+
+export function getLocale(): "en" | "zh" {
+  return normalizeLocale(i18n.language);
 }
 
 /**
- * React hook for internationalization.
- * Re-renders the component when the locale changes.
+ * Subscribe to locale changes.
+ * Returns an unsubscribe function (mirrors the old API).
+ */
+export function onLocaleChange(fn: () => void): () => void {
+  const handler = () => fn();
+  i18n.on("languageChanged", handler);
+  return () => {
+    i18n.off("languageChanged", handler);
+  };
+}
+
+/**
+ * React hook — drop-in replacement for the old `useTranslation`.
+ *
+ * Returns `{ t, locale, setLocale }` exactly as before.
+ * Components re-render automatically when the language changes thanks
+ * to react-i18next's internal subscription.
  */
 export function useTranslation() {
-  const locale = useSyncExternalStore(onLocaleChange, getLocale, getLocale);
-  return { t, locale, setLocale };
+  const { t: i18nextT, i18n: instance } = useReactI18next();
+
+  // Build a `t` wrapper that matches the old overloaded signature
+  const tWrapped = (
+    key: string,
+    paramsOrFallback?: Record<string, string | number> | string,
+  ): string => {
+    if (typeof paramsOrFallback === "string") {
+      return i18nextT(key, { defaultValue: paramsOrFallback });
+    }
+    if (paramsOrFallback && typeof paramsOrFallback === "object") {
+      return i18nextT(key, paramsOrFallback);
+    }
+    return i18nextT(key);
+  };
+
+  const locale = normalizeLocale(instance.language);
+
+  const changeLocale = (l: "en" | "zh") => {
+    instance.changeLanguage(l);
+  };
+
+  return { t: tWrapped, locale, setLocale: changeLocale };
 }
 
 export default { t, setLocale, getLocale, onLocaleChange, useTranslation };

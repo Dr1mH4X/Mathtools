@@ -24,14 +24,16 @@
 
 - **核心框架**: React 19 (Strict Mode)
 - **路由管理**: React Router DOM v7 (HashRouter)
+- **状态管理**: Zustand 5
+- **国际化**: i18next + react-i18next
 - **构建工具**: Vite 7
-- **语言**: TypeScript (严格模式, `erasableSyntaxOnly`)
+- **语言**: TypeScript
 - **CSS 框架**: Tailwind CSS v4
-- **数学计算**: Math.js (表达式解析与求值)
-- **公式渲染**: KaTeX (LaTeX 高性能渲染)
+- **数学计算**: Math.js
+- **公式渲染**: KaTeX
 - **3D 渲染**: Three.js (WebGL 旋转体网格生成与可视化, 含 OrbitControls)
-- **安全防护**: DOMPurify (防御 XSS 攻击)
-- **图标库**: Lucide React (SVG 图标)
+- **安全防护**: DOMPurify
+- **图标库**: Lucide React
 - **包管理器**: pnpm
 
 ---
@@ -52,11 +54,15 @@ Mathtools/
 │   ├── composables/        # 自定义 Hooks
 │   │   ├── useSEO.ts       # SEO 与 Meta 管理
 │   │   └── useThreeScene.ts # Three.js 场景工厂 (非 React Hook)
-│   ├── i18n/               # 国际化多语言配置与 Hook
-│   │   ├── index.ts        # i18n 核心 (useSyncExternalStore)
+│   ├── i18n/               # 国际化 (i18next + react-i18next)
+│   │   ├── config.ts       # i18next 初始化与配置
+│   │   ├── index.ts        # 兼容层：re-export useTranslation / t / setLocale
 │   │   └── locales/
 │   │       ├── en.json     # 英文语言包
 │   │       └── zh.json     # 中文语言包
+│   ├── stores/             # Zustand 全局状态管理
+│   │   ├── useThemeStore.ts    # 主题状态 (isDark, toggle, 持久化)
+│   │   └── useRevolutionStore.ts # 旋转体页面状态 (曲线、边界、显示选项、结果等)
 │   ├── pages/              # 页面级组件
 │   │   ├── Home.tsx        # 首页 (工具卡片网格)
 │   │   ├── PlaceholderPage.tsx # 占位页面 (Coming Soon)
@@ -73,7 +79,7 @@ Mathtools/
 │   │   └── presets.ts      # 预设示例数据
 │   ├── App.tsx             # 根组件与路由配置
 │   ├── env.d.ts            # TypeScript 环境声明
-│   ├── main.tsx            # 应用程序入口文件
+│   ├── main.tsx            # 应用程序入口文件 (引导 i18n 与 theme store)
 │   └── style.css           # 全局样式与 Tailwind v4 入口
 ├── index.html              # HTML 模板
 ├── package.json            # 项目依赖与脚本
@@ -112,21 +118,42 @@ Mathtools/
 </Router>
 ```
 
-### 2. 状态管理与生命周期
+### 2. 状态管理 (Zustand)
 
-摒弃了全局状态管理库（如 Redux/Zustand），采用 React 原生的 `useState`, `useMemo`, `useEffect`, `useRef`, `useCallback` 进行局部状态管理。
+使用 **Zustand 5** 作为全局状态管理方案，替代了原先散落在各组件中的 15+ 个 `useState` 调用。所有 Store 位于 `src/stores/` 目录下：
 
-- **表单与输入**: 使用受控组件 (Controlled Components) 管理用户输入的数学公式和配置。
-- **性能优化**: 使用 `useMemo` 缓存解析后的数学曲线，避免不必要的重复编译；使用 `useCallback` 缓存事件处理函数（如 `handleGenerate`）以避免不必要的副作用重新执行。
-- **DOM 引用**: 使用 `useRef` 获取 Canvas 和 Three.js 容器的引用，以便将原生 WebGL/Canvas API 与 React 生命周期结合。
+#### `useThemeStore.ts` — 主题状态
+```tsx
+import { useThemeStore } from "@/stores/useThemeStore";
+const { isDark, toggleTheme } = useThemeStore();
+```
+- **不使用 localStorage**：每次进入网站时通过 `matchMedia("(prefers-color-scheme: dark)")` 自动检测系统偏好。
+- 模块加载时通过 `subscribe` 自动同步 `data-theme` 属性到 `<html>`，无需在组件内手动 `useEffect`。
+- 模块加载时还注册 `matchMedia` 的 `change` 事件监听，系统主题变化时 store 自动跟随。
+- `AppHeader` 组件直接消费 `useThemeStore()`，不再持有本地 theme state。
+
+#### `useRevolutionStore.ts` — 旋转体页面状态
+```tsx
+import { useRevolutionStore } from "@/stores/useRevolutionStore";
+const { curveInputs, addCurve, display, setDisplay, reset, ... } = useRevolutionStore();
+```
+- 统一管理曲线输入、边界、旋转轴、显示选项、计算结果、UI 开关等全部页面状态。
+- 提供 `addCurve()`, `removeCurve()`, `updateCurve()`, `reset()` 等原子操作。
+- 页面组件 `RevolutionVolume.tsx` 通过解构获取所需状态与 action，代码量大幅减少。
+
+#### React 原生 Hooks（辅助）
+- **性能优化**: 使用 `useMemo` 缓存解析后的数学曲线，`useCallback` 缓存事件处理函数。
+- **DOM 引用**: 使用 `useRef` 获取 Canvas 和 Three.js 容器的引用。
 - **Three.js 初始化**: 通过 `requestAnimationFrame` 延迟 `init()` 调用，确保 DOM 容器已获得布局尺寸，兼容 React 18+ Strict Mode 的双重挂载/卸载机制。
 
-### 3. 国际化系统 (i18n Hook)
+### 3. 国际化系统 (i18next + react-i18next)
 
-实现了一个轻量级的多语言字典系统，并封装为 React Hook。
+使用 **i18next** 与 **react-i18next** 实现完整的国际化方案
 
-- **底层实现**: 基于 `useSyncExternalStore` 订阅语言切换事件，确保语言切换时组件能够精确且高效地重新渲染。
-- **语言持久化**: 通过 `localStorage` 存储用户偏好语言，默认根据浏览器语言自动检测。
+- **配置文件**: `src/i18n/config.ts` 负责初始化 i18next 实例，加载 `locales/en.json` 和 `locales/zh.json` 资源。
+- **插值语法**: 使用 `{placeholder}` 风格（与原有语言包 JSON 保持一致），通过 `interpolation.prefix / suffix` 配置。
+- **语言自动检测**: 每次进入网站时通过 `navigator.language` 自动检测浏览器语言；切换语言时仅更新 `<html lang>` 属性。
+- **React 集成**: react-i18next 的 `useTranslation` 自动订阅语言变化，组件精确重渲染。
 - **使用方式**:
 ```tsx
 import { useTranslation } from "@/i18n";
@@ -141,17 +168,15 @@ export default function MyComponent() {
 
 通过自定义 Hook `useSEO` 动态管理页面的 `<title>`, `<meta name="description">` 以及 Open Graph 标签。该 Hook 监听路由变化和语言切换，自动更新 DOM 的头部信息。
 
-### 5. 主题系统
+### 5. 主题系统 (Zustand)
 
-主题管理遵循以下优先级：
+主题状态由 `useThemeStore` (Zustand) 统一管理：
 
-1. **用户手动选择** → 存储到 `localStorage("mathtools-theme")`
-2. **系统偏好** → 通过 `matchMedia("(prefers-color-scheme: dark)")` 检测
-3. **默认行为** → 跟随系统偏好
+1. **每次进入网站** → 通过 `matchMedia("(prefers-color-scheme: dark)")` 自动检测系统偏好
+2. **用户手动切换** → 调用 `toggleTheme()` 在当前会话中取反
+3. **系统偏好变化** → 全局 `matchMedia` change 监听器自动更新 store，实时跟随系统
 
-用户点击主题切换按钮时取反当前状态。`AppHeader` 组件还监听系统主题变化事件，当用户未手动覆盖时自动跟随系统。
-
-主题通过 `data-theme="dark"` 属性控制 CSS 变量切换，配合 Three.js 的 `updateBackground()` 保持 3D 场景背景同步。
+Store 的 `subscribe` 回调在状态变化时自动同步 `data-theme="dark"` 属性到 `<html>` 元素，配合 Three.js 的 `updateBackground()` 保持 3D 场景背景同步。组件无需再编写 `useEffect` 来管理 DOM 属性。
 
 ---
 
@@ -330,7 +355,7 @@ Three.js 的场景、相机、渲染器被封装在 `useThreeScene` 工厂中。
 
 ## 构建与运行
 
-项目使用 Vite 作为构建工具，提供极速的冷启动和 HMR（热更新）。
+项目使用 Vite 作为构建工具
 
 ### 安装依赖
 ```bash
@@ -347,7 +372,7 @@ pnpm dev
 ```bash
 pnpm build
 ```
-执行 TypeScript 类型检查 (`tsc -b`) 并使用 Vite 进行生产环境打包。打包配置中已对 `three`, `mathjs`, `katex`, `react` 等大型依赖进行了分包 (Manual Chunks) 优化。
+执行 TypeScript 类型检查 (`tsc -b`) 并使用 Vite 进行生产环境打包。
 
 ### 预览生产构建
 ```bash

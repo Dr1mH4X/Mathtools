@@ -1,14 +1,10 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useEffect, useRef, useMemo, useCallback } from "react";
 import { useTranslation } from "@/i18n";
 import katex from "katex";
 import DOMPurify from "dompurify";
 import Canvas2D from "@/components/revolution/Canvas2D";
 import type { Canvas2DHandle } from "@/components/revolution/Canvas2D";
-import {
-  useThreeScene,
-  defaultDisplayOptions,
-  type DisplayOptions,
-} from "@/composables/useThreeScene";
+import { useThreeScene } from "@/composables/useThreeScene";
 import {
   computeRegion,
   computeVolume,
@@ -18,10 +14,12 @@ import {
   equationToLatex,
   presetExamples,
   type CurveDefinition,
-  type RotationAxis,
-  type ComputedRegion,
-  type RevolutionResult,
 } from "@/utils/mathEngine";
+import {
+  useRevolutionStore,
+  makeId,
+  defaultCurveColors,
+} from "@/stores/useRevolutionStore";
 import {
   Activity,
   Plus,
@@ -47,51 +45,46 @@ import {
   Copy,
 } from "lucide-react";
 
-let nextCurveId = 1;
-function makeId(): string {
-  return String(nextCurveId++);
-}
-
-const defaultCurveColors = [
-  "#4f6ef7",
-  "#e74c8b",
-  "#2ecc71",
-  "#f0a500",
-  "#9b59b6",
-  "#1abc9c",
-  "#e67e22",
-  "#3498db",
-];
-
-interface CurveInput {
-  id: string;
-  equation: string;
-  color: string;
-}
-
 export default function RevolutionVolume() {
   const { t } = useTranslation();
 
-  // Default: use the "parabola & line" preset values (y=x^2 and y=x, bounds 0–1)
-  const [curveInputs, setCurveInputs] = useState<CurveInput[]>([
-    { id: makeId(), equation: "y = x^2", color: defaultCurveColors[0] },
-    { id: makeId(), equation: "y = x", color: defaultCurveColors[1] },
-  ]);
-  const [xMin, setXMin] = useState(0);
-  const [xMax, setXMax] = useState(1);
-  const [axis, setAxis] = useState<RotationAxis>("x");
-  const [axisValue, setAxisValue] = useState(0);
-  const [display, setDisplay] = useState<DisplayOptions>(defaultDisplayOptions);
-
-  const [region, setRegion] = useState<ComputedRegion | null>(null);
-  const [result, setResult] = useState<RevolutionResult | null>(null);
-  const [errorMsg, setErrorMsg] = useState("");
-  const [activeView, setActiveView] = useState<"2d" | "3d">("2d");
-  const [showHelp, setShowHelp] = useState(false);
-  const [formulaCopied, setFormulaCopied] = useState(false);
-  const [isGenerated, setIsGenerated] = useState(false);
-  const [resultCollapsed, setResultCollapsed] = useState(false);
-  const [shouldGenerate, setShouldGenerate] = useState(false);
+  // --- Zustand store (replaces 15+ useState calls) ---
+  const {
+    curveInputs,
+    addCurve: handleAddCurve,
+    removeCurve: handleRemoveCurve,
+    updateCurve,
+    xMin,
+    xMax,
+    setXMin,
+    setXMax,
+    axis,
+    axisValue,
+    setAxis,
+    setAxisValue,
+    display,
+    setDisplay,
+    region,
+    result,
+    setRegion,
+    setResult,
+    errorMsg,
+    setErrorMsg,
+    activeView,
+    setActiveView,
+    showHelp,
+    toggleHelp,
+    formulaCopied,
+    setFormulaCopied,
+    isGenerated,
+    setIsGenerated,
+    resultCollapsed,
+    toggleResultCollapsed,
+    setResultCollapsed,
+    shouldGenerate,
+    setShouldGenerate,
+    reset: storeReset,
+  } = useRevolutionStore();
 
   const threeContainerRef = useRef<HTMLDivElement>(null);
   const threeSceneRef = useRef<ReturnType<typeof useThreeScene> | null>(null);
@@ -184,31 +177,12 @@ export default function RevolutionVolume() {
 
   const canGenerate = parsedCurves.length >= 2;
 
-  const handleAddCurve = () => {
-    if (curveInputs.length >= 8) return;
-    setCurveInputs([
-      ...curveInputs,
-      {
-        id: makeId(),
-        equation: "",
-        color:
-          defaultCurveColors[curveInputs.length % defaultCurveColors.length],
-      },
-    ]);
-  };
-
-  const handleRemoveCurve = (id: string) => {
-    setCurveInputs(curveInputs.filter((c) => c.id !== id));
-  };
-
   const handleCurveChange = (
     id: string,
-    field: keyof CurveInput,
+    field: "id" | "equation" | "color",
     value: string,
   ) => {
-    setCurveInputs(
-      curveInputs.map((c) => (c.id === id ? { ...c, [field]: value } : c)),
-    );
+    updateCurve(id, field, value);
   };
 
   const handleAutoDetect = () => {
@@ -325,37 +299,26 @@ export default function RevolutionVolume() {
   }, [shouldGenerate, handleGenerate]);
 
   const handleReset = () => {
-    setCurveInputs([
-      { id: makeId(), equation: "y = x^2", color: defaultCurveColors[0] },
-      { id: makeId(), equation: "y = x", color: defaultCurveColors[1] },
-    ]);
-    setXMin(0);
-    setXMax(1);
-    setAxis("x");
-    setAxisValue(0);
-    setRegion(null);
-    setResult(null);
-    setIsGenerated(false);
-    setErrorMsg("");
-    setActiveView("2d");
+    storeReset();
     if (threeSceneRef.current) {
       threeSceneRef.current.clearScene();
     }
   };
 
   const loadPreset = (preset: any) => {
-    setCurveInputs(
+    const store = useRevolutionStore.getState();
+    store.setCurveInputs(
       preset.curves.map((c: any, i: number) => ({
         id: makeId(),
         equation: c.equation,
         color: c.color || defaultCurveColors[i % defaultCurveColors.length],
       })),
     );
-    setXMin(preset.xMin);
-    setXMax(preset.xMax);
-    setAxis(preset.axis);
-    setAxisValue(preset.axisValue);
-    setShouldGenerate(true);
+    store.setXMin(preset.xMin);
+    store.setXMax(preset.xMax);
+    store.setAxis(preset.axis);
+    store.setAxisValue(preset.axisValue);
+    store.setShouldGenerate(true);
   };
 
   // Click-to-copy formula (replaces the copy button)
@@ -445,7 +408,7 @@ export default function RevolutionVolume() {
             </div>
             <button
               className="p-2 rounded-md text-text-soft hover:text-text hover:bg-bg transition-colors"
-              onClick={() => setShowHelp(!showHelp)}
+              onClick={toggleHelp}
               title={t("revolution.help.title", "Help")}
             >
               <HelpCircle size={20} />
@@ -986,7 +949,7 @@ export default function RevolutionVolume() {
             {/* Header */}
             <div
               className="flex items-center justify-between px-6 py-2.5 cursor-pointer border-b border-border/50"
-              onClick={() => setResultCollapsed(!resultCollapsed)}
+              onClick={toggleResultCollapsed}
             >
               <div className="flex items-center gap-2 text-primary font-bold text-sm">
                 <TrendingUp size={16} />
