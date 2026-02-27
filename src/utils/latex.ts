@@ -82,6 +82,11 @@ export function normalizeExpression(expr: string): string {
   // Remove any remaining stray backslashes before letters (e.g. \alpha unsupported)
   s = s.replace(/\\([a-zA-Z])/g, "$1");
 
+  // Remove any remaining stray backslashes (e.g. lone "\" at end of input,
+  // or "\" followed by non-letter characters like digits or punctuation).
+  // These have no mathematical meaning and would cause mathjs parse errors.
+  s = s.replace(/\\/g, "");
+
   // \ln → log  (mathjs uses log for natural logarithm)
   s = s.replace(/\bln\(/g, "log(");
 

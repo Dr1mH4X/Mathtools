@@ -125,6 +125,9 @@ export function parseEquation(
 
   if (yMatch) {
     const expr = yMatch[1]!.trim();
+    // Guard: reject empty or whitespace-only RHS (e.g. after stripping
+    // stray backslashes the expression may become blank)
+    if (!expr) return null;
     // Determine if it's a constant or a function of x
     if (isConstantExpression(expr, "x")) {
       return { type: "y_const", expression: expr };
@@ -134,6 +137,7 @@ export function parseEquation(
 
   if (xMatch) {
     const expr = xMatch[1]!.trim();
+    if (!expr) return null;
     // Determine if it's a constant or a function of y
     if (isConstantExpression(expr, "y")) {
       return { type: "x_const", expression: expr };
@@ -446,7 +450,14 @@ export function sampleCurve(
     }
   }
 
-  const cc = compileCurve(effectiveCurve);
+  let cc: CompiledCurve;
+  try {
+    cc = compileCurve(effectiveCurve);
+  } catch {
+    // Expression is not (yet) valid — return empty so the canvas simply
+    // draws nothing for this curve instead of crashing React.
+    return [];
+  }
   const dx = (xMax - xMin) / steps;
   const pts: ProfilePoint[] = [];
 
