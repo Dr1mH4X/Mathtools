@@ -12,10 +12,17 @@ import i18n from "./config";
 import { useTranslation as useReactI18next } from "react-i18next";
 
 export type { Locale } from "./config";
-export type Locale_ = "en" | "zh";
 
 // Re-export the configured i18n instance for advanced use
 export { default as i18n } from "./config";
+
+/**
+ * Normalise whatever language string i18next holds (e.g. "en-US",
+ * "zh-CN", "zh-TW") into one of the two supported locale keys.
+ */
+function normalizeLocale(lng?: string): "en" | "zh" {
+  return lng?.startsWith("zh") ? "zh" : "en";
+}
 
 /**
  * Stand-alone translate function (works outside React).
@@ -48,7 +55,7 @@ export function setLocale(locale: "en" | "zh"): void {
 }
 
 export function getLocale(): "en" | "zh" {
-  return (i18n.language as "en" | "zh") || "en";
+  return normalizeLocale(i18n.language);
 }
 
 /**
@@ -87,7 +94,7 @@ export function useTranslation() {
     return i18nextT(key);
   };
 
-  const locale = (instance.language as "en" | "zh") || "en";
+  const locale = normalizeLocale(instance.language);
 
   const changeLocale = (l: "en" | "zh") => {
     instance.changeLanguage(l);

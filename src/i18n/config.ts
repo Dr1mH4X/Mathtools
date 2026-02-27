@@ -6,6 +6,7 @@ import zh from "./locales/zh.json";
 export type Locale = "en" | "zh";
 
 function detectBrowserLocale(): Locale {
+  if (typeof navigator === "undefined") return "en";
   const browserLang = navigator.language.toLowerCase();
   if (browserLang.startsWith("zh")) {
     return "zh";
@@ -33,10 +34,14 @@ i18n.use(initReactI18next).init({
 
 // Keep html lang attribute in sync (no localStorage)
 i18n.on("languageChanged", (lng: string) => {
-  document.documentElement.setAttribute("lang", lng);
+  if (typeof document !== "undefined") {
+    document.documentElement.setAttribute("lang", lng);
+  }
 });
 
 // Set initial lang attribute
-document.documentElement.setAttribute("lang", i18n.language);
+if (typeof document !== "undefined") {
+  document.documentElement.setAttribute("lang", i18n.language);
+}
 
 export default i18n;
