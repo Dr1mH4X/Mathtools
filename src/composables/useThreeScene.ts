@@ -55,6 +55,7 @@ export function useThreeScene(
   let currentAxis: RotationAxis = "x";
   let currentAxisValue = 0;
   let currentDisplay: DisplayOptions = { ...defaultDisplayOptions };
+  let currentCurveColors: [string, string] = ["#4f6ef7", "#e74c8b"];
 
   // Animation state
   let animationStartTime = 0;
@@ -317,6 +318,7 @@ export function useThreeScene(
     axisValue: number,
     display: DisplayOptions,
     angleExtent?: number,
+    curveColors?: [string, string],
   ) {
     if (!scene) return;
 
@@ -326,29 +328,31 @@ export function useThreeScene(
     currentAxis = axis;
     currentAxisValue = axisValue;
     currentDisplay = { ...display };
+    if (curveColors) currentCurveColors = curveColors;
 
     const extent = angleExtent ?? display.angleExtent;
     const angularSegments = display.resolution;
 
-    const { positions, indices, normals } = generateRevolutionGeometry(
+    const { positions, indices, normals, colors } = generateRevolutionGeometry(
       region,
       axis,
       axisValue,
       angularSegments,
       extent,
+      currentCurveColors[0],
+      currentCurveColors[1],
     );
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     geometry.setIndex(new THREE.BufferAttribute(indices, 1));
     geometry.computeBoundingSphere();
 
-    const color = new THREE.Color(display.color);
-
-    // Solid mesh
+    // Solid mesh — use per-vertex colours from the 2D curve colours
     const solidMaterial = new THREE.MeshPhysicalMaterial({
-      color,
+      vertexColors: true,
       side: THREE.DoubleSide,
       transparent: display.mode === "transparent",
       opacity: display.mode === "transparent" ? display.opacity : 1.0,
@@ -364,8 +368,12 @@ export function useThreeScene(
 
     // Wireframe overlay
     const wireGeo = new THREE.WireframeGeometry(geometry);
+    const wireColor =
+      display.mode === "wireframe"
+        ? new THREE.Color(display.color)
+        : new THREE.Color(0x000000);
     const wireMat = new THREE.LineBasicMaterial({
-      color: display.mode === "wireframe" ? color : 0x000000,
+      color: wireColor,
       transparent: true,
       opacity: display.mode === "wireframe" ? 0.9 : 0.08,
       linewidth: 1,
@@ -375,7 +383,13 @@ export function useThreeScene(
 
     // Cross-section highlight
     if (display.showCrossSection) {
-      buildCrossSection(region, axis, axisValue, display.color);
+      buildCrossSection(
+        region,
+        axis,
+        axisValue,
+        display.color,
+        currentCurveColors,
+      );
     }
 
     // Auto-fit camera
@@ -392,23 +406,24 @@ export function useThreeScene(
     // Rebuild geometry with new angle extent
     clearSolid();
 
-    const { positions, indices, normals } = generateRevolutionGeometry(
+    const { positions, indices, normals, colors } = generateRevolutionGeometry(
       currentRegion,
       currentAxis,
       currentAxisValue,
       currentDisplay.resolution,
       angle,
+      currentCurveColors[0],
+      currentCurveColors[1],
     );
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     geometry.setIndex(new THREE.BufferAttribute(indices, 1));
 
-    const color = new THREE.Color(currentDisplay.color);
-
     const solidMaterial = new THREE.MeshPhysicalMaterial({
-      color,
+      vertexColors: true,
       side: THREE.DoubleSide,
       transparent: currentDisplay.mode === "transparent",
       opacity:
@@ -424,8 +439,12 @@ export function useThreeScene(
     scene.add(solidMesh);
 
     const wireGeo = new THREE.WireframeGeometry(geometry);
+    const wireColor =
+      currentDisplay.mode === "wireframe"
+        ? new THREE.Color(currentDisplay.color)
+        : new THREE.Color(0x000000);
     const wireMat = new THREE.LineBasicMaterial({
-      color: currentDisplay.mode === "wireframe" ? color : 0x000000,
+      color: wireColor,
       transparent: true,
       opacity: currentDisplay.mode === "wireframe" ? 0.9 : 0.08,
       linewidth: 1,
@@ -439,6 +458,7 @@ export function useThreeScene(
         currentAxis,
         currentAxisValue,
         currentDisplay.color,
+        currentCurveColors,
       );
     }
   }
@@ -447,7 +467,8 @@ export function useThreeScene(
     region: ComputedRegion,
     axis: RotationAxis,
     axisValue: number,
-    color: string,
+    _color: string,
+    curveColors?: [string, string],
   ) {
     if (!scene) return;
 
@@ -459,7 +480,9 @@ export function useThreeScene(
     crossSectionGroup = new THREE.Group();
     crossSectionGroup.name = "crossSection";
 
-    const csColor = new THREE.Color(color).offsetHSL(0, 0, -0.2);
+    // Per-curve cross-section colours (fall back to legacy single colour)
+    const upperCsColor = new THREE.Color(curveColors ? curveColors[0] : _color);
+    const lowerCsColor = new THREE.Color(curveColors ? curveColors[1] : _color);
 
     // Draw the 2D profile in 3D space
     const upperPts: THREE.Vector3[] = [];
@@ -481,13 +504,13 @@ export function useThreeScene(
       }
     }
 
-    // Upper curve
+    // Upper curve — uses upper curve's colour
     if (upperPts.length > 1) {
       const upperGeo = new THREE.BufferGeometry().setFromPoints(upperPts);
       const upperLine = new THREE.Line(
         upperGeo,
         new THREE.LineBasicMaterial({
-          color: csColor,
+          color: upperCsColor,
           linewidth: 2,
           transparent: true,
           opacity: 0.9,
@@ -496,13 +519,13 @@ export function useThreeScene(
       crossSectionGroup.add(upperLine);
     }
 
-    // Lower curve
+    // Lower curve — uses lower curve's colour
     if (lowerPts.length > 1) {
       const lowerGeo = new THREE.BufferGeometry().setFromPoints(lowerPts);
       const lowerLine = new THREE.Line(
         lowerGeo,
         new THREE.LineBasicMaterial({
-          color: csColor,
+          color: lowerCsColor,
           linewidth: 2,
           transparent: true,
           opacity: 0.9,
@@ -511,7 +534,7 @@ export function useThreeScene(
       crossSectionGroup.add(lowerLine);
     }
 
-    // Filled region (semi-transparent)
+    // Filled region (semi-transparent, blend of both curve colours)
     if (upperPts.length > 1 && lowerPts.length > 1) {
       const shape = new THREE.Shape();
       // Trace upper from left to right
@@ -525,9 +548,11 @@ export function useThreeScene(
       }
       shape.closePath();
 
+      // Use a blend of both curve colours for the filled region
+      const blendColor = upperCsColor.clone().lerp(lowerCsColor, 0.5);
       const shapeGeo = new THREE.ShapeGeometry(shape, 1);
       const shapeMat = new THREE.MeshBasicMaterial({
-        color: csColor,
+        color: blendColor,
         transparent: true,
         opacity: 0.2,
         side: THREE.DoubleSide,
@@ -632,14 +657,29 @@ export function useThreeScene(
 
   // ===== Update display options =====
 
-  function updateDisplay(display: Partial<DisplayOptions>) {
+  function updateDisplay(
+    display: Partial<DisplayOptions>,
+    curveColors?: [string, string],
+  ) {
     currentDisplay = { ...currentDisplay, ...display };
+    if (curveColors) currentCurveColors = curveColors;
+
+    // When curve colours change we need to rebuild vertex colours
+    if (curveColors && solidMesh && currentRegion) {
+      buildSolid(
+        currentRegion,
+        currentAxis,
+        currentAxisValue,
+        currentDisplay,
+        undefined,
+        currentCurveColors,
+      );
+      return;
+    }
 
     if (solidMesh) {
       const mat = solidMesh.material as THREE.MeshPhysicalMaterial;
-      if (display.color !== undefined) {
-        mat.color.set(display.color);
-      }
+      // Vertex-coloured material: don't override mat.color
       if (display.mode !== undefined) {
         mat.transparent = display.mode === "transparent";
         mat.opacity =
@@ -688,6 +728,7 @@ export function useThreeScene(
           currentAxis,
           currentAxisValue,
           currentDisplay.color,
+          currentCurveColors,
         );
       }
     }
@@ -713,6 +754,7 @@ export function useThreeScene(
         currentAxisValue,
         currentDisplay,
         Math.PI * 2,
+        currentCurveColors,
       );
     }
   }
