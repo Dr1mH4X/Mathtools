@@ -57,6 +57,7 @@ export {
 
 // ————— Curve engine —————
 export {
+  ParseError,
   evalConst,
   parseEquation,
   isConstantExpression,

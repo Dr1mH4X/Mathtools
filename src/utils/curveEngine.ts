@@ -172,6 +172,13 @@ export function isConstantExpression(expr: string, variable: string): boolean {
 
 // ===== Compilation & evaluation =====
 
+export class ParseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ParseError";
+  }
+}
+
 /**
  * Compile a CurveDefinition into a CompiledCurve that can be efficiently
  * evaluated at many parameter values.
@@ -180,7 +187,7 @@ export function compileCurve(curve: CurveDefinition): CompiledCurve {
   if (curve.type === "x_const" || curve.type === "y_const") {
     const val = evalConst(curve.expression);
     if (isNaN(val)) {
-      throw new Error(`Cannot parse constant: ${curve.expression}`);
+      throw new ParseError(`Cannot parse constant: ${curve.expression}`);
     }
     return { def: curve, fn: null, constVal: val };
   }
@@ -192,7 +199,9 @@ export function compileCurve(curve: CurveDefinition): CompiledCurve {
     return { def: curve, fn: compiled, constVal: null };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    throw new Error(`Cannot parse expression "${curve.expression}": ${msg}`);
+    throw new ParseError(
+      `Cannot parse expression "${curve.expression}": ${msg}`,
+    );
   }
 }
 
@@ -454,24 +463,22 @@ export function sampleCurve(
   try {
     cc = compileCurve(effectiveCurve);
   } catch (err: unknown) {
-    // compileCurve throws Error with messages starting with
-    // "Cannot parse constant:" or "Cannot parse expression" for
-    // user-input validation failures.  For those we silently return
-    // an empty sample set so the canvas draws nothing for this curve
-    // instead of crashing React mid-render.
-    if (
-      err instanceof Error &&
-      (err.message.startsWith("Cannot parse") ||
-        err.message.startsWith("Cannot parse constant"))
-    ) {
+    // compileCurve throws ParseError for user-input validation failures.
+    // For those we silently return an empty sample set so the canvas
+    // draws nothing for this curve instead of crashing React mid-render.
+    if (err instanceof ParseError) {
       return [];
     }
-    // Unexpected / programming error — log so it doesn't go unnoticed,
-    // but still return [] to keep the UI from white-screening.
+    // Unexpected / programming error — log so it doesn't go unnoticed.
     console.error(
       "[curveEngine] sampleCurve: unexpected error from compileCurve",
       err,
     );
+    // In development, rethrow to avoid swallowing real bugs.
+    if (import.meta.env.DEV) {
+      throw err;
+    }
+    // In production, return [] to keep the UI from white-screening.
     return [];
   }
   const dx = (xMax - xMin) / steps;
