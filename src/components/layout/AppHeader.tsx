@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, Link } from "react-router-dom";
-import { Menu, X, Moon, Sun, Globe, Github } from "lucide-react";
+import { Menu, X, Moon, Sun, Globe, Github, Heart } from "lucide-react";
 import { useTranslation } from "@/i18n";
 import { useThemeStore } from "@/stores/useThemeStore";
 
@@ -91,6 +91,16 @@ export default function AppHeader() {
             title="GitHub"
           >
             <Github size={20} />
+          </a>
+
+          <a
+            href="https://ifdian.net/a/dreamhax"
+            target="_blank"
+            rel="noreferrer"
+            className="header-btn p-2 rounded-md text-text-soft hover:text-text hover:bg-bg-soft transition-colors"
+            title="Sponsor"
+          >
+            <Heart size={20} />
           </a>
 
           {/* Language toggle: Globe icon from lucide-react */}
