@@ -75,6 +75,7 @@ export {
   computeRegionTwoCurves,
   computeRegionMultiCurves,
 } from "./regionEngine";
+export type { RegionOptions } from "./regionEngine";
 
 // ————— Volume engine —————
 export {
