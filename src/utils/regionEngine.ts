@@ -112,13 +112,12 @@ export function computeRegion(
   // When rotating around x-axis, we also consider the axis itself
   // as a potential boundary (y = axisValue).
   // ---------------------------------------------------------------
-  const n = yFunctions.length;
   const scanSteps = Math.min(resolution, 100);
   const scanDx = (effectiveXMax - effectiveXMin) / scanSteps;
 
   // For x-axis rotation, add the axis as a virtual function
   const allFunctions = [...yFunctions];
-  const axisFunction = (x: number) => axisValue;
+  const axisFunction = (_x: number) => axisValue;
   if (isXAxisRotation) {
     allFunctions.push(axisFunction);
   }
@@ -127,7 +126,6 @@ export function computeRegion(
   let bestTopIdx = 1;
   let bestBotIdx = 0;
   let bestScore = Infinity; // We want minimum average gap (tightest enclosure)
-  let bestNonzeroFrac = 0;
 
   for (let i = 0; i < totalFunctions; i++) {
     for (let j = i + 1; j < totalFunctions; j++) {
@@ -168,7 +166,6 @@ export function computeRegion(
         bestScore = avgGap;
         bestTopIdx = i;
         bestBotIdx = j;
-        bestNonzeroFrac = nonzeroFrac;
       }
     }
   }
