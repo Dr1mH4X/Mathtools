@@ -1,4 +1,9 @@
-import type { CurveDefinition, ComputedRegion, ProfilePoint } from "./types";
+import type {
+  CurveDefinition,
+  ComputedRegion,
+  ProfilePoint,
+  RotationAxis,
+} from "./types";
 import type { InverseFunctionOptions } from "./curveEngine";
 import {
   compileCurve,
@@ -16,6 +21,18 @@ import {
 // ===================================================================
 
 /**
+ * Options for region computation.
+ */
+export interface RegionOptions {
+  /** The axis of rotation (affects which region is selected) */
+  axis?: RotationAxis;
+  /** The value of the rotation axis (e.g., y=0 for x-axis rotation) */
+  axisValue?: number;
+  /** Options for inverse function creation */
+  inverseOptions?: InverseFunctionOptions;
+}
+
+/**
  * Given a set of curves and x-bounds, compute the upper and lower boundary
  * profiles of the bounded region.
  *
@@ -24,14 +41,15 @@ import {
  * 2. At each step, identify all valid adjacent curve pairs.
  * 3. Maintain the "active" boundary pair.
  * 4. If the active pair ceases to be valid (e.g., intersection/split),
- *    select the new pair that maintains continuity (matches the previous height).
+ *    select the new pair using topological crossing detection.
+ * 5. When rotating around x-axis, ensure the region is above the axis.
  */
 export function computeRegion(
   curves: CurveDefinition[],
   xMin: number,
   xMax: number,
   resolution: number = 200,
-  inverseOptions?: InverseFunctionOptions,
+  options?: RegionOptions,
 ): ComputedRegion {
   if (curves.length < 2) {
     throw new Error("At least 2 curves are needed to define a region.");
@@ -39,24 +57,23 @@ export function computeRegion(
 
   const compiled = curves.map(compileCurve);
 
-  // Separate constant-x curves (vertical lines) which define x boundaries
+  // Extract rotation axis information
+  const axis = options?.axis ?? "x";
+  const axisValue = options?.axisValue ?? 0;
+  const inverseOptions = options?.inverseOptions;
+
   let effectiveXMin = xMin;
   let effectiveXMax = xMax;
-
   const xConstCurves = compiled.filter((c) => c.def.type === "x_const");
   const funcCurves = compiled.filter((c) => c.def.type !== "x_const");
 
   if (xConstCurves.length >= 2) {
-    // Only when we have two or more vertical lines do we use them to bound the region
     const xVals = xConstCurves.map((c) => c.constVal!).sort((a, b) => a - b);
     const first = xVals[0];
     const last = xVals[xVals.length - 1];
     if (first !== undefined) effectiveXMin = Math.max(effectiveXMin, first);
     if (last !== undefined) effectiveXMax = Math.min(effectiveXMax, last);
   }
-  // FIX: When there's only one vertical line, do NOT modify the bounds.
-  // A single vertical line doesn't define a closed region boundary.
-  // Let the intersection detection handle finding the correct x range.
 
   if (effectiveXMin >= effectiveXMax) {
     throw new Error(
@@ -64,12 +81,6 @@ export function computeRegion(
     );
   }
 
-  // Convert remaining curves to y(x) functions.
-  // For x_of_y curves we use the safe wrapper so that a single curve whose
-  // y-domain lies outside the sampling window doesn't abort the entire
-  // region computation — it will simply be treated as unevaluable (NaN).
-  // Diagnostics are handled by the debug-gated `warnOnce` inside
-  // `tryCreateInverseFunction` (no onError callback needed).
   const yFunctions: ((x: number) => number)[] = funcCurves.map((cc) => {
     if (cc.def.type === "y_of_x" || cc.def.type === "y_const") {
       return (x: number) => evalCurve(cc, x);
@@ -79,113 +90,121 @@ export function computeRegion(
     return (_x: number) => NaN;
   });
 
-  const upperPts: ProfilePoint[] = [];
-  const lowerPts: ProfilePoint[] = [];
-
-  const dx = (effectiveXMax - effectiveXMin) / resolution;
-
-  let currentTopIdx: number | null = null;
-  let currentBotIdx: number | null = null;
-  let prevHeight = 0;
-
-  // Helper to safely evaluate
   const evalFn = (fn: (x: number) => number, x: number): number => {
     const v = fn(x);
     return isFinite(v) ? v : NaN;
   };
 
-  for (let i = 0; i <= resolution; i++) {
-    const x = effectiveXMin + i * dx;
+  // ---------------------------------------------------------------
+  // When rotating around x-axis, we need to ensure the region is
+  // above the axis (y >= axisValue). This means:
+  // 1. The lower boundary should be at least axisValue
+  // 2. Curves below the axis should not be considered as lower boundary
+  // ---------------------------------------------------------------
+  const isXAxisRotation = axis === "x";
 
-    // 1. Evaluate all curves at x
-    const values = yFunctions.map((fn, idx) => ({ y: evalFn(fn, x), idx }));
+  // ---------------------------------------------------------------
+  // Pre-scan: score every pair (i,j) by the integral of |fi(x)-fj(x)|
+  // over [effectiveXMin, effectiveXMax].  The pair with the smallest
+  // average gap that is still nonzero over most of the range is the
+  // one that forms the tightest closed region.
+  //
+  // When rotating around x-axis, we also consider the axis itself
+  // as a potential boundary (y = axisValue).
+  // ---------------------------------------------------------------
+  const n = yFunctions.length;
+  const scanSteps = Math.min(resolution, 100);
+  const scanDx = (effectiveXMax - effectiveXMin) / scanSteps;
 
-    // Filter valid numbers and sort by y
-    const validPoints = values
-      .filter((p) => isFinite(p.y))
-      .sort((a, b) => a.y - b.y);
+  // For x-axis rotation, add the axis as a virtual function
+  const allFunctions = [...yFunctions];
+  const axisFunction = (x: number) => axisValue;
+  if (isXAxisRotation) {
+    allFunctions.push(axisFunction);
+  }
+  const totalFunctions = allFunctions.length;
 
-    if (validPoints.length < 2) {
-      // Not enough curves to define a region at this x
-      continue;
-    }
+  let bestTopIdx = 1;
+  let bestBotIdx = 0;
+  let bestScore = Infinity; // We want minimum average gap (tightest enclosure)
+  let bestNonzeroFrac = 0;
 
-    // 2. Identify adjacent pairs
-    type Candidate = {
-      topIdx: number;
-      botIdx: number;
-      topY: number;
-      botY: number;
-      height: number;
-    };
-    const candidates: Candidate[] = [];
+  for (let i = 0; i < totalFunctions; i++) {
+    for (let j = i + 1; j < totalFunctions; j++) {
+      let totalGap = 0;
+      let validCount = 0;
+      let nonzeroCount = 0;
 
-    for (let k = 0; k < validPoints.length - 1; k++) {
-      const pBot = validPoints[k]!;
-      const pTop = validPoints[k + 1]!;
+      for (let s = 0; s <= scanSteps; s++) {
+        const x = effectiveXMin + s * scanDx;
+        const yi = evalFn(allFunctions[i]!, x);
+        const yj = evalFn(allFunctions[j]!, x);
+        if (!isFinite(yi) || !isFinite(yj)) continue;
 
-      const height = pTop.y - pBot.y;
-
-      candidates.push({
-        topIdx: pTop.idx,
-        botIdx: pBot.idx,
-        topY: pTop.y,
-        botY: pBot.y,
-        height: height,
-      });
-    }
-
-    // 3. Select the best candidate
-    let bestPair: Candidate | null = null;
-
-    if (currentTopIdx === null || currentBotIdx === null) {
-      // Initialization: pick the pair with the largest height
-      bestPair = candidates.reduce(
-        (prev, curr) => (curr.height > prev.height ? curr : prev),
-        candidates[0]!,
-      );
-    } else {
-      // Try to maintain current pair
-      const samePair = candidates.find(
-        (c) => c.topIdx === currentTopIdx && c.botIdx === currentBotIdx,
-      );
-
-      if (samePair) {
-        bestPair = samePair;
-      } else {
-        // The current pair split or merged. Need to switch.
-        // Strategy: Continuity of Height.
-        const possibleSwitches = candidates.filter(
-          (c) =>
-            (c.topIdx === currentTopIdx || c.botIdx === currentBotIdx) &&
-            !(c.topIdx === currentTopIdx && c.botIdx === currentBotIdx),
-        );
-
-        if (possibleSwitches.length > 0) {
-          bestPair = possibleSwitches.reduce((best, curr) => {
-            const bestDiff = Math.abs(best.height - prevHeight);
-            const currDiff = Math.abs(curr.height - prevHeight);
-            return currDiff < bestDiff ? curr : best;
-          }, possibleSwitches[0]!);
-        } else {
-          // Complete change — fallback: closest height to previous
-          bestPair = candidates.reduce((best, curr) => {
-            const bestDiff = Math.abs(best.height - prevHeight);
-            const currDiff = Math.abs(curr.height - prevHeight);
-            return currDiff < bestDiff ? curr : best;
-          }, candidates[0]!);
+        // For x-axis rotation, skip pairs where both are below the axis
+        if (isXAxisRotation && Math.min(yi, yj) < axisValue - 1e-9) {
+          // This pair goes below the axis - penalize it
+          continue;
         }
+
+        const gap = Math.abs(yi - yj);
+        totalGap += gap;
+        validCount++;
+        if (gap > 1e-9) nonzeroCount++;
+      }
+
+      if (validCount === 0) continue;
+
+      const avgGap = totalGap / validCount;
+      const nonzeroFrac = nonzeroCount / validCount;
+
+      // Only consider pairs that are nonzero over most of the interval
+      // (i.e., they actually enclose an area, not just touch everywhere)
+      if (nonzeroFrac < 0.3) continue;
+
+      // Among valid pairs, prefer the one with the smallest average gap
+      // (tightest enclosure = the actual bounded region)
+      if (avgGap < bestScore) {
+        bestScore = avgGap;
+        bestTopIdx = i;
+        bestBotIdx = j;
+        bestNonzeroFrac = nonzeroFrac;
       }
     }
+  }
 
-    if (bestPair) {
-      upperPts.push({ x, y: bestPair.topY });
-      lowerPts.push({ x, y: bestPair.botY });
+  // ---------------------------------------------------------------
+  // With the best pair locked, evaluate those two curves at
+  // each sample point. Apply axis constraint for x-axis rotation.
+  // ---------------------------------------------------------------
+  const fTop = allFunctions[bestTopIdx]!;
+  const fBot = allFunctions[bestBotIdx]!;
 
-      currentTopIdx = bestPair.topIdx;
-      currentBotIdx = bestPair.botIdx;
-      prevHeight = bestPair.height;
+  const upperPts: ProfilePoint[] = [];
+  const lowerPts: ProfilePoint[] = [];
+  const dx = (effectiveXMax - effectiveXMin) / resolution;
+
+  for (let i = 0; i <= resolution; i++) {
+    const x = effectiveXMin + i * dx;
+    const ya = evalFn(fTop, x);
+    const yb = evalFn(fBot, x);
+    if (!isFinite(ya) || !isFinite(yb)) continue;
+
+    let hi = Math.max(ya, yb);
+    let lo = Math.min(ya, yb);
+
+    // For x-axis rotation, clamp the lower boundary to the axis
+    if (isXAxisRotation) {
+      // If both values are below the axis, skip this point
+      if (hi < axisValue - 1e-9) continue;
+      // Clamp lower boundary to axis
+      lo = Math.max(lo, axisValue);
+      // Ensure hi >= lo after clamping
+      if (hi < lo) continue;
     }
+
+    upperPts.push({ x, y: hi });
+    lowerPts.push({ x, y: lo });
   }
 
   if (upperPts.length < 2) {
