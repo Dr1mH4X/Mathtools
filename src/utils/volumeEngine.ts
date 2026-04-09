@@ -236,6 +236,13 @@ export function createInterpolator(
 /**
  * Try to automatically detect reasonable x-bounds for the given curves.
  * Looks for intersection points and extends slightly beyond.
+ *
+ * Algorithm:
+ * 1. Find all intersection points between curves
+ * 2. If there are multiple intersections, use the full span (min to max)
+ *    as the default bounds - this captures the entire enclosed region
+ * 3. Only use the "best interval" scoring when there's a single interval
+ *    or when the full span doesn't make sense
  */
 export function autoDetectBounds(
   curves: CurveDefinition[],
@@ -247,13 +254,11 @@ export function autoDetectBounds(
 ): { xMin: number; xMax: number } {
   const compiled = curves.map(compileCurve);
 
-  // Get x_const values
   const xConsts = compiled
     .filter((c) => c.def.type === "x_const")
     .map((c) => c.constVal!)
     .filter(isFinite);
 
-  // Get y(x) functions for non-const curves (including x_of_y via inverse)
   const funcCurves = compiled.filter(
     (c) =>
       c.def.type === "y_of_x" ||
@@ -261,12 +266,6 @@ export function autoDetectBounds(
       c.def.type === "x_of_y",
   );
 
-  // Build y(x) evaluation functions.
-  // For x_of_y curves we use the safe wrapper so that a single curve whose
-  // y-domain lies outside the sampling window doesn't abort the entire
-  // auto-detection — it will simply be skipped (treated as NaN).
-  // Diagnostics are handled by the debug-gated `warnOnce` inside
-  // `tryCreateInverseFunction` (no onError callback needed).
   const yFunctions: ((x: number) => number)[] = funcCurves.map((cc) => {
     if (cc.def.type === "y_of_x" || cc.def.type === "y_const") {
       return (x: number) => evalCurve(cc, x);
@@ -278,7 +277,6 @@ export function autoDetectBounds(
 
   const allXValues: number[] = [...xConsts];
 
-  // Find pairwise intersections
   for (let i = 0; i < yFunctions.length; i++) {
     for (let j = i + 1; j < yFunctions.length; j++) {
       const f1 = yFunctions[i]!;
@@ -295,18 +293,113 @@ export function autoDetectBounds(
   }
 
   if (allXValues.length < 2) {
-    // Fallback: use a reasonable default
     return { xMin: -5, xMax: 5 };
   }
 
-  allXValues.sort((a, b) => a - b);
-  const firstVal = allXValues[0]!;
-  const lastVal = allXValues[allXValues.length - 1]!;
+  // Deduplicate and sort candidate x-values
+  const dedupedXValues = allXValues
+    .map((v) => parseFloat(v.toFixed(6)))
+    .filter((v, i, arr) => i === 0 || Math.abs(v - arr[i - 1]!) > 1e-4)
+    .sort((a, b) => a - b);
 
-  // Use exact bounds (no margin) so the region computation can properly
-  // determine the closed area bounded by intersections
+  if (dedupedXValues.length < 2) {
+    return { xMin: -5, xMax: 5 };
+  }
+
+  // NEW APPROACH: Use the full span of intersection points as the default
+  // This captures the entire enclosed region formed by all curves
+  // The full span is the region from the leftmost to the rightmost intersection
+  const fullSpanMin = dedupedXValues[0]!;
+  const fullSpanMax = dedupedXValues[dedupedXValues.length - 1]!;
+  const fullSpanWidth = fullSpanMax - fullSpanMin;
+
+  // Check if the full span has meaningful area (curves that enclose a region)
+  // Sample across the full span to check if there's actual enclosed area
+  const sampleCount = 20;
+  let fullSpanValidSamples = 0;
+  let fullSpanTotalGap = 0;
+
+  for (let s = 0; s <= sampleCount; s++) {
+    const x = fullSpanMin + (s / sampleCount) * fullSpanWidth;
+    const ys = yFunctions.map((f) => f(x)).filter((v) => isFinite(v));
+    if (ys.length >= 2) {
+      ys.sort((a, b) => a - b);
+      // Find the minimum adjacent gap
+      let minGap = Infinity;
+      for (let m = 0; m < ys.length - 1; m++) {
+        const gap = ys[m + 1]! - ys[m]!;
+        if (gap < minGap) minGap = gap;
+      }
+      if (minGap < Infinity) {
+        fullSpanTotalGap += minGap;
+        fullSpanValidSamples++;
+      }
+    }
+  }
+
+  // If the full span has valid samples with reasonable gaps, use it
+  // This is the primary case for enclosed regions
+  if (fullSpanValidSamples > sampleCount * 0.3 && fullSpanWidth > 1e-6) {
+    const avgGap = fullSpanTotalGap / fullSpanValidSamples;
+    // If there's meaningful enclosed area across the full span, use it
+    if (avgGap > 1e-6) {
+      return {
+        xMin: parseFloat(fullSpanMin.toFixed(4)),
+        xMax: parseFloat(fullSpanMax.toFixed(4)),
+      };
+    }
+  }
+
+  // FALLBACK: Among all adjacent sub-intervals [xValues[k], xValues[k+1]],
+  // find the one with the largest enclosed area (max average gap between curves).
+  // This is used when the full span doesn't have meaningful enclosed area.
+  let bestXMin = dedupedXValues[0]!;
+  let bestXMax = dedupedXValues[1]!;
+  let bestScore = -Infinity;
+
+  for (let k = 0; k < dedupedXValues.length - 1; k++) {
+    const xa = dedupedXValues[k]!;
+    const xb = dedupedXValues[k + 1]!;
+    const width = xb - xa;
+    if (width < 1e-6) continue;
+
+    // Sample the minimum gap between any two curves in this interval
+    // to check if this interval is actually "enclosed"
+    const intervalSampleCount = 10;
+    let totalMinGap = 0;
+    let validSamples = 0;
+
+    for (let s = 0; s <= intervalSampleCount; s++) {
+      const x = xa + (s / intervalSampleCount) * width;
+      const ys = yFunctions.map((f) => f(x)).filter((v) => isFinite(v));
+      if (ys.length < 2) continue;
+      ys.sort((a, b) => a - b);
+      // Find the minimum adjacent gap — this is the "tightest" pair
+      let minGap = Infinity;
+      for (let m = 0; m < ys.length - 1; m++) {
+        const gap = ys[m + 1]! - ys[m]!;
+        if (gap < minGap) minGap = gap;
+      }
+      totalMinGap += minGap;
+      validSamples++;
+    }
+
+    if (validSamples === 0) continue;
+
+    // Score = area proxy: width × average min-gap
+    // This prefers intervals where curves form a tight, well-defined enclosure
+    const avgMinGap = totalMinGap / validSamples;
+    const score = width * avgMinGap;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestXMin = xa;
+      bestXMax = xb;
+    }
+  }
+
   return {
-    xMin: parseFloat(firstVal.toFixed(4)),
-    xMax: parseFloat(lastVal.toFixed(4)),
+    xMin: parseFloat(bestXMin.toFixed(4)),
+    xMax: parseFloat(bestXMax.toFixed(4)),
   };
 }
