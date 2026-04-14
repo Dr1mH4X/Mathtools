@@ -64,6 +64,7 @@ export function computeRegion(
 
   let effectiveXMin = xMin;
   let effectiveXMax = xMax;
+
   const xConstCurves = compiled.filter((c) => c.def.type === "x_const");
   const funcCurves = compiled.filter((c) => c.def.type !== "x_const");
 
@@ -95,38 +96,32 @@ export function computeRegion(
     return isFinite(v) ? v : NaN;
   };
 
-  // ---------------------------------------------------------------
-  // When rotating around x-axis, we need to ensure the region is
-  // above the axis (y >= axisValue). This means:
-  // 1. The lower boundary should be at least axisValue
-  // 2. Curves below the axis should not be considered as lower boundary
-  // ---------------------------------------------------------------
   const isXAxisRotation = axis === "x";
 
   // ---------------------------------------------------------------
-  // Pre-scan: score every pair (i,j) by the integral of |fi(x)-fj(x)|
-  // over [effectiveXMin, effectiveXMax].  The pair with the smallest
-  // average gap that is still nonzero over most of the range is the
-  // one that forms the tightest closed region.
-  //
-  // When rotating around x-axis, we also consider the axis itself
-  // as a potential boundary (y = axisValue).
+  // FIX: Only add the rotation axis as a virtual boundary if the user
+  // provided fewer than 2 explicit curves. When 2+ curves are provided,
+  // we must respect the user's intention and let the algorithm find the
+  // region among *their* curves. Otherwise, a spurious axis curve can
+  // create a smaller sub-region (e.g. between y=e^-x and y=0 instead of
+  // y=e^x and y=e^-x) that incorrectly wins the "tightest enclosure" heuristic.
   // ---------------------------------------------------------------
+  const allFunctions = [...yFunctions];
+  const axisFunction = (_x: number) => axisValue;
+
+  if (yFunctions.length < 2) {
+    allFunctions.push(axisFunction);
+  }
+
+  const totalFunctions = allFunctions.length;
+  let bestTopIdx = 1;
+  let bestBotIdx = 0;
+  let bestScore = Infinity;
+
   const scanSteps = Math.min(resolution, 100);
   const scanDx = (effectiveXMax - effectiveXMin) / scanSteps;
 
-  // For x-axis rotation, add the axis as a virtual function
-  const allFunctions = [...yFunctions];
-  const axisFunction = (_x: number) => axisValue;
-  if (isXAxisRotation) {
-    allFunctions.push(axisFunction);
-  }
-  const totalFunctions = allFunctions.length;
-
-  let bestTopIdx = 1;
-  let bestBotIdx = 0;
-  let bestScore = Infinity; // We want minimum average gap (tightest enclosure)
-
+  // We want minimum average gap (tightest enclosure)
   for (let i = 0; i < totalFunctions; i++) {
     for (let j = i + 1; j < totalFunctions; j++) {
       let totalGap = 0;
@@ -141,7 +136,6 @@ export function computeRegion(
 
         // For x-axis rotation, skip pairs where both are below the axis
         if (isXAxisRotation && Math.min(yi, yj) < axisValue - 1e-9) {
-          // This pair goes below the axis - penalize it
           continue;
         }
 
@@ -156,12 +150,8 @@ export function computeRegion(
       const avgGap = totalGap / validCount;
       const nonzeroFrac = nonzeroCount / validCount;
 
-      // Only consider pairs that are nonzero over most of the interval
-      // (i.e., they actually enclose an area, not just touch everywhere)
       if (nonzeroFrac < 0.3) continue;
 
-      // Among valid pairs, prefer the one with the smallest average gap
-      // (tightest enclosure = the actual bounded region)
       if (avgGap < bestScore) {
         bestScore = avgGap;
         bestTopIdx = i;
@@ -176,7 +166,6 @@ export function computeRegion(
   // ---------------------------------------------------------------
   const fTop = allFunctions[bestTopIdx]!;
   const fBot = allFunctions[bestBotIdx]!;
-
   const upperPts: ProfilePoint[] = [];
   const lowerPts: ProfilePoint[] = [];
   const dx = (effectiveXMax - effectiveXMin) / resolution;
@@ -192,11 +181,8 @@ export function computeRegion(
 
     // For x-axis rotation, clamp the lower boundary to the axis
     if (isXAxisRotation) {
-      // If both values are below the axis, skip this point
       if (hi < axisValue - 1e-9) continue;
-      // Clamp lower boundary to axis
       lo = Math.max(lo, axisValue);
-      // Ensure hi >= lo after clamping
       if (hi < lo) continue;
     }
 
